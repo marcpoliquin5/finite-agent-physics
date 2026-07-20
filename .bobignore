@@ -1,0 +1,8 @@
+.git/
+.venv/
+artifacts/
+benchmark-results/
+*.sqlite3
+.env
+.env.*
+!*.example

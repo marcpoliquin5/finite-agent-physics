@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "finite-agent-physics": {
+      "command": "python",
+      "args": ["-m", "agent_physics.mcp_server"],
+      "cwd": ".",
+      "disabled": false
+    }
+  }
+}
