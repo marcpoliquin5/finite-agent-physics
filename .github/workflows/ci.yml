@@ -28,3 +28,27 @@ jobs:
         run: python -m pytest --cov=agent_physics --cov-report=term-missing --cov-fail-under=85
       - name: Preflight smoke test
         run: python -m agent_physics.cli preflight
+      - name: Judge-bundle CLI smoke test
+        if: matrix.python-version == '3.11'
+        run: python -m agent_physics.cli judge-bundle --revision ci-unverified
+
+  console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/physics-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: npm
+          cache-dependency-path: apps/physics-console/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Render and artifact-boundary tests
+        run: npm test
+      - name: Lint
+        run: npm run lint
+      - name: Dependency audit
+        run: npm audit --audit-level=low

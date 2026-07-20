@@ -81,8 +81,27 @@ An append-only event stream records graph versions, scheduler decisions, profile
 reservations, actual use, artifacts, approvals, retries, cancellations, and outcomes. It is
 the basis for replay, debugging, evaluation, and judge-visible proof.
 
-## First vertical slice
+## Current vertical slice
 
-The first implementation is a deterministic discrete-event simulator. That is deliberate:
-we can unit-test scheduling invariants and compare policies without cloud variance. The same
-contracts and events will drive the async executor in the next milestone.
+The deterministic discrete-event simulator remains the planning and counterfactual engine.
+The same contracts now also drive an async, fixture-only executor with conservative adaptive
+admission, bounded concurrency, worst-case retry reservation, absolute deadlines, cooperative
+cancellation, actual-use settlement, output validation, and durable SQLite restart state.
+The StormShift runtime maps all ten pure/read nodes to deterministic typed fixture workers,
+produces a response plan and bilingual preview, revalidates the structural report, and leaves
+the eleventh publication node as a proposed intent. A fresh runtime reconstructs all eleven
+durable outputs without another worker call.
+
+Execution is deliberately narrower than simulation claims might suggest:
+
+- one active executor owns a run ID; there is no distributed lease or HA coordinator;
+- injected Python workers are trusted fixtures, not sandboxed model or tool adapters;
+- stored outputs are revalidated on resume and the execution manifest binds the selected
+  profiles, retry policy, validator revision, workers, and effect contracts;
+- declared writes never enter fixture workers: they become durable proposed effect intents;
+- a run with proposed but uncommitted writes reports `awaiting_effects`, not `completed`;
+- the run ledger and effect broker use separate SQLite databases and do not provide a single
+  cross-database atomic transaction.
+
+This boundary lets the repository test control-plane mechanics without disguising fixture
+execution as a production provider runtime.

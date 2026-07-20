@@ -1,10 +1,15 @@
+import asyncio
+
 from agent_physics.mcp_server import (
     finite_capabilities,
     finite_context_drill,
     finite_effect_drill,
+    finite_executor_drill,
+    finite_fault_experiment,
     finite_preflight,
     finite_registered_faults,
     finite_simulate,
+    finite_stormshift_validate,
     finite_verify,
 )
 
@@ -52,3 +57,42 @@ def test_effect_drill_is_single_apply_after_hard_and_soft_faults() -> None:
         assert result["external_effects_possible"] is False
         assert result["final_state"] == "committed"
         assert result["physical_apply_count"] == 1
+
+
+def test_stormshift_validation_passes_nominal_and_fails_closed_under_faults() -> None:
+    nominal = finite_stormshift_validate()
+    stale = finite_stormshift_validate("stale-artifact")
+    unsafe = finite_stormshift_validate("external-publication")
+    assert nominal["passed"] is True
+    assert nominal["digest_verified"] is True
+    assert nominal["external_effects_possible"] is False
+    assert stale["passed"] is False
+    assert unsafe["passed"] is False
+
+
+def test_fault_experiment_is_complete_paired_and_descriptive_only() -> None:
+    summary = finite_fault_experiment("mcp-test-v1")
+    assert summary["measurement_kind"] == "deterministic-simulation"
+    assert summary["claim_status"] == "descriptive-only"
+    assert summary["raw_record_count"] == 450
+    assert summary["design"]["paired_seed_count"] == 30
+    assert summary["external_systems_called"] is False
+
+
+def test_executor_drill_resumes_all_completed_work_and_only_proposes_effect() -> None:
+    result = asyncio.run(finite_executor_drill())
+    assert result["external_effects_possible"] is False
+    assert result["external_calls_made"] is False
+    assert result["model_calls_made"] is False
+    assert result["validator_kind"] == "deterministic_structural_only"
+    assert result["task_count"] == 11
+    assert result["resumed_task_count"] == 11
+    assert result["first_run_state"] == "awaiting_effects"
+    assert result["resumed_run_state"] == "awaiting_effects"
+    assert result["first_worker_call_count"] == 10
+    assert result["restart_worker_call_count"] == 0
+    assert result["validation_digest_verified"] is True
+    assert result["response_plan_digest"]
+    assert result["validation_report_digest"]
+    assert result["effect_output"]["effect_state"] == "proposed"
+    assert result["effect_output"]["executed_externally"] is False

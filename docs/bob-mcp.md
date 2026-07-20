@@ -30,7 +30,9 @@ initialize handshake, lists tools, and calls `finite_capabilities`.
 4. Restart `finite-agent-physics` from Bob's MCP panel.
 5. Ask Bob to call `finite_capabilities` first.
 6. Call `finite_preflight` once with the default envelope and once with `max_tokens=1`.
-7. Call `finite_verify` and retain Bob's tool-call evidence.
+7. Call `finite_executor_drill`, `finite_stormshift_validate`, and
+   `finite_fault_experiment`; retain Bob's tool-call evidence and returned digests.
+8. Call `finite_verify` and retain the fail-closed verification result.
 
 The expected contrast is a feasible schedule witness versus a conservative pre-spend
 refusal. The refusal is deliberately not called a proof of mathematical infeasibility.
@@ -44,9 +46,16 @@ refusal. The refusal is deliberately not called a proof of mathematical infeasib
 - `finite_registered_faults`: preregistered faults, all labeled not yet executed.
 - `finite_context_drill`: data-only hostile-context packing and cap refusal.
 - `finite_effect_drill`: simulation-only crash/idempotency/approval drill.
+- `finite_stormshift_validate`: structural validation of the typed fictional workload and
+  adversarial fixture transformations.
+- `finite_fault_experiment`: one nominal control plus four pre-dispatch simulated faults,
+  across 30 paired seeds and three development policies (450 raw records).
+- `finite_executor_drill`: durable local fixture execution and restart reconstruction; the
+  publication task stops in `awaiting_effects` with a `PROPOSED` intent.
 
-There is intentionally no external effect-commit tool and no tool named `run` yet. Those
-names remain blocked until an actual executor and production-IAM effect adapter exist.
+There is intentionally no external effect-commit tool and no generic provider-backed tool
+named `run` yet. Those surfaces remain blocked until live adapter-side caps, production IAM,
+worker isolation, and distributed run ownership exist.
 
 ## Evidence rule
 

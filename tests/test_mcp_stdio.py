@@ -27,6 +27,9 @@ def test_stdio_server_handshake_tool_discovery_and_call() -> None:
                     "finite_registered_faults",
                     "finite_context_drill",
                     "finite_effect_drill",
+                    "finite_stormshift_validate",
+                    "finite_fault_experiment",
+                    "finite_executor_drill",
                 } <= names
                 result = await session.call_tool("finite_capabilities", {})
                 assert not result.isError

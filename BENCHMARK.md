@@ -24,6 +24,29 @@ SLO pass = mandatory validators pass
 The current `static_parallel` simulator policy is a development reference, not the tuned
 LangGraph baseline and not valid for a public superiority claim.
 
+## Implemented deterministic slice
+
+The committed experiment runner freezes the `mixed` generated scenario and executes a full
+Cartesian design with no condition or seed selection:
+
+- one identity-preserving nominal control;
+- provider-b declared p50/p95 duration multiplied by three;
+- declared economy profile removed before scheduling;
+- provider-b declared concurrency reduced from two to one;
+- token, cost, and context budgets uniformly reduced to 1/75 of their declared values;
+- 30 frozen paired seeds and three simulator policies, producing 450 raw records.
+
+Every record binds its complete contents, pre-fault and transformed graph/envelope digests,
+pair identity, modeled result, and claim labels. Validation regenerates the frozen design and
+rejects missing, duplicate, modified, or cherry-picked records. Summaries keep success rate,
+performance conditional on success, and modeled time-to-failure separate. Policy comparisons
+are per-seed deltas versus adaptive with Wilson pass-rate intervals and paired-seed bootstrap
+intervals.
+
+These are pre-dispatch deterministic transformations, not live-provider faults. The revision
+label is caller supplied and unauthenticated; a trusted release commit or signed external
+manifest is still required to authenticate provenance against coordinated relabeling.
+
 ## Evaluation tiers
 
 - Scheduler microbenchmarks over seeded chain, fork-join, diamond, wide-fan-out, heavy-tail,
@@ -47,6 +70,9 @@ LangGraph baseline and not valid for a public superiority claim.
 ## Registered fault regimes
 
 Each fault is labeled real, simulated, or replayed:
+
+The list below is the target protocol. Only the four transformations in the implemented
+deterministic slice above currently produce the complete paired evidence set.
 
 - provider 429 burst and reset;
 - slow-tail inference;

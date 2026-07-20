@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from .examples import miami_eoc_envelope, miami_eoc_graph
 from .feasibility import FeasibilityAnalyzer
 from .ledger import verify_conservation
+from .judge_bundle import build_judge_evidence
 from .scheduler import SchedulePolicy, Scheduler
 
 
@@ -53,6 +55,27 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[policy.value for policy in SchedulePolicy],
         default=SchedulePolicy.ADAPTIVE.value,
     )
+    judge = subparsers.add_parser(
+        "judge-bundle",
+        help="write the complete digest-bound offline evidence bundle",
+    )
+    judge.add_argument(
+        "--output",
+        type=Path,
+        default=Path("artifacts/judge-evidence.json"),
+    )
+    judge.add_argument(
+        "--raw-experiments",
+        type=Path,
+        default=Path("artifacts/judge-experiments.jsonl"),
+    )
+    judge.add_argument(
+        "--revision",
+        help=(
+            "optional caller label (marked unverified); omit to read local Git HEAD and "
+            "report dirty state"
+        ),
+    )
     return parser
 
 
@@ -89,6 +112,28 @@ def main(argv: list[str] | None = None) -> int:
         }
         print(json.dumps(payload, indent=2))
         return 0 if certificate.status.value != "refused" and conservation.passed else 1
+    if args.command == "judge-bundle":
+        root = Path(__file__).resolve().parents[2]
+        output = args.output.resolve()
+        raw_experiments = args.raw_experiments.resolve()
+        bundle = build_judge_evidence(
+            revision=args.revision,
+            project_root=root,
+            provenance_excluded_paths=(output, raw_experiments),
+        )
+        bundle.write(output, raw_experiments_path=raw_experiments)
+        print(
+            json.dumps(
+                {
+                    "verified": bundle.verify(),
+                    "content_digest": bundle.content_digest,
+                    "judge_bundle": str(output),
+                    "raw_experiments": str(raw_experiments),
+                },
+                sort_keys=True,
+            )
+        )
+        return 0 if bundle.verify() else 1
     return 2
 
 
