@@ -39,6 +39,18 @@ def test_console_artifact_is_current_digest_bound_kernel_output() -> None:
     assert experiment["condition_count"] == 5
     assert experiment["policy_count"] == 3
     assert experiment["revision_provenance"] == "caller-supplied-unverified"
+    assert payload["resource_ledger_stress"]["transition_count"] == 10_000
+    assert payload["resource_ledger_stress"]["independent_replay_passed"] is True
+    assert payload["provider_quota_stress"]["logical_calls"] == 1_200
+    assert payload["provider_quota_stress"]["settled_calls"] == 384
+    assert payload["provider_quota_stress"]["aggregate_guard_scope"] == (
+        "per_instance_only_not_process_global_or_distributed"
+    )
+    assert payload["replanning_witness"]["final_revision"] == 2
+    assert payload["replanning_witness"]["shed_task_ids"] == ["social_signal_scan"]
+    assert payload["replanning_witness"]["second_disposition"] == "refused"
+    assert payload["decision_explanation_evidence"]["record_count"] == 79
+    assert payload["decision_explanation_evidence"]["reasoning_access"] is False
 
 
 def test_console_artifact_keeps_simulation_and_refusal_boundaries_explicit() -> None:

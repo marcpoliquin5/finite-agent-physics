@@ -30,8 +30,16 @@ def test_stdio_server_handshake_tool_discovery_and_call() -> None:
                     "finite_stormshift_validate",
                     "finite_fault_experiment",
                     "finite_executor_drill",
-                } <= names
+                    "finite_quota_corpus",
+                    "finite_replanning_drill",
+                    "finite_decision_explanation_drill",
+                } == names
+                assert len(tools.tools) == 13
                 result = await session.call_tool("finite_capabilities", {})
                 assert not result.isError
+                quota = await session.call_tool(
+                    "finite_quota_corpus", {"seed": 13, "cycles": 2}
+                )
+                assert not quota.isError
 
     asyncio.run(exercise())

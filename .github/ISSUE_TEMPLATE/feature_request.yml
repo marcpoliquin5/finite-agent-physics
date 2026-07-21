@@ -1,0 +1,40 @@
+name: Capability proposal
+description: Propose a capability with a falsifiable acceptance gate
+title: "[capability] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Constraint or user problem
+      description: What failure or missing promise does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Proposed contract
+      description: Describe inputs, outputs, resource/effect semantics, and trust boundary.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Falsifiable acceptance gate
+      description: Name the normal, failure, replay, and adversarial evidence required.
+    validations:
+      required: true
+  - type: input
+    id: program
+    attributes:
+      label: PROGRAM.md capability or release proof
+      placeholder: M13, S18, R06, or new proposal
+    validations:
+      required: true
+  - type: checkboxes
+    id: claims
+    attributes:
+      label: Claim discipline
+      options:
+        - label: I will not present a hypothesis, simulation, or static comparator as live performance evidence.
+          required: true

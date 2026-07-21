@@ -47,11 +47,14 @@ cost budgets, context movement, tail latency, retries, write conflicts, and the 
 some actions cannot safely be repeated. Agent Physics puts those constraints into an
 **execution envelope**, then continuously accounts for them.
 
-The architecture has seven cooperating planes:
+The target architecture has seven cooperating planes; the
+[acceptance audit](docs/capability-status.md) distinguishes implemented, partial, and future
+behavior:
 
 1. **Intent compiler** - turns goals into typed task and effect contracts.
 2. **Constraint solver** - admits, rejects, or degrades plans before they overspend.
-3. **Adaptive scheduler** - chooses topology, backend, parallelism, and speculation online.
+3. **Adaptive scheduler** - currently routes profiles, protects mandatory work, and sheds
+   optional work; topology switching and speculation remain target capabilities.
 4. **Context fabric** - moves content-addressed artifacts instead of rebroadcasting transcripts.
 5. **Effect kernel** - protects irreversible actions with capabilities, idempotency, and approval.
 6. **Evidence ledger** - records causal events, resource use, policy decisions, and provenance.
@@ -59,8 +62,8 @@ The architecture has seven cooperating planes:
 
 ```mermaid
 flowchart LR
-    Bob["IBM Bob"] --> MCP["10-tool MCP seam"]
-    Frameworks["Any graph / agent framework"] --> Contracts["Typed promises"]
+    Bob["IBM Bob"] --> MCP["13-tool MCP seam"]
+    Frameworks["Framework adapters (target)"] --> Contracts["Typed promises"]
     MCP --> Contracts
     Contracts --> Admit{"Conservative admission"}
     Admit -->|"refuse before dispatch"| Evidence["Digest-bound evidence"]
@@ -88,6 +91,13 @@ agent-physics judge-bundle
 python -m pytest
 ```
 
+The optional external comparator has its own pinned install and evidence path:
+
+```powershell
+python -m pip install -e ".[langgraph]"
+agent-physics langgraph-baseline --output artifacts/langgraph-baseline.json
+```
+
 The local Physics Console has its own locked toolchain:
 
 ```powershell
@@ -113,6 +123,12 @@ It currently demonstrates:
 - deterministic simulation events, cancellation settlement, and fail-closed trace verification;
 - an independently replayed 10,000-transition integer resource-ledger stress corpus covering
   reservations, settlements, refunds, cap refusal, overrun refusal, and identity conflict;
+- a reset-aware local quota model covering declared RPM, TPM, concurrency, bounded retries,
+  deadlines, settlement, and 429 suppression across a seeded 1,200-call corpus;
+- digest-bound residual-graph replanning that retains elapsed time, settled usage, completed
+  work, and effect boundaries across typed capacity/failure/envelope events;
+- one structured numeric explanation record for every scheduler event, derived only from
+  public graph/envelope/trace facts and explicitly excluding hidden chain-of-thought;
 - immutable evidence artifacts, freshness/conflict assessment, and all-or-refuse context obligations;
 - a SQLite effect-intent/outbox state machine with scoped approval grants, fencing, idempotency,
   crash ambiguity, and compensation against a simulation-only target;
@@ -125,6 +141,8 @@ It currently demonstrates:
 - a complete 450-record deterministic experiment design with one nominal control, four fault
   transformations, 30 paired seeds, per-seed deltas, Wilson intervals, and paired bootstrap
   intervals;
+- a pinned real-LangGraph nominal conformance comparator that runs the same fixture workers,
+  verifies joins/checkpoints/caps, exports a self-digested record, and makes no performance claim;
 - a Bob-compatible STDIO MCP server verified through a real protocol handshake;
 - an optional watsonx.ai adapter that records live-labeled, redacted inference receipts;
 - sequential and static-parallel development-reference policies;
@@ -136,17 +154,21 @@ It currently demonstrates:
 
 No performance claim is considered valid until it is reproduced by the benchmark suite.
 See [the claim boundary](docs/claims-and-prior-art.md), [known limitations](docs/limitations.md),
-[the 60-capability engineering program](PROGRAM.md), and its
-[acceptance audit](docs/capability-status.md).
+[the 62-capability engineering program and eight integrated release proofs](PROGRAM.md), and its
+[acceptance audit](docs/capability-status.md). The dated
+[competitive landscape](docs/competitive-landscape.md) separates orchestration libraries,
+agent platforms, and browser agents; it records the live PageAgent/LangChain comparison and the
+release gaps FINITE must close without pretending stars are technical evidence.
 
 ## Designed with Bob, callable by Bob
 
 IBM Bob’s July 2026 release already includes a shared agent harness, parallel execution,
 subagents, workflow orchestration, model routing, approvals, and usage analytics. FINITE does
 not imitate those capabilities. It is being built as a constraint-verification and runtime
-control extension that Bob can call through ten MCP tools: preflight a workflow, inspect a
-schedule, verify invariants, execute and resume trusted fixtures, validate StormShift structure,
-and run the registered deterministic experiment. See
+control extension that Bob can call through 13 MCP tools: preflight and inspect schedules,
+verify invariants, execute and resume trusted fixtures, validate StormShift structure, replay
+declared quota pressure, exercise modeled replanning, derive public-fact explanations, and run
+the registered deterministic experiment. See
 [the IBM/Bob product boundary](docs/ibm-bob-fit.md).
 
 ## Demonstration: Miami EOC pressure test
@@ -162,6 +184,7 @@ inference will be a separate presentation and evaluation path.
 
 IBM Bob must be a core development tool for the challenge entry. This repository therefore
 keeps an explicit, auditable [Bob workstream](docs/bob-workstream.md) and
+[session runbook](docs/bob-session-runbook.md), plus a
 [build log](docs/bob-build-log.md). Entries must describe real Bob sessions; they must never
 be backfilled or fabricated. IBM Granite/watsonx is planned as a runtime backend, but that
 does not replace the requirement to use Bob substantially during development.
@@ -174,8 +197,9 @@ work. This requirement is incomplete until genuine evidence is added.
 
 Alpha vertical slice. The simulator, feasibility certificates, conservation verifier,
 artifact/context subsystem, effect kernel, durable fixture executor, StormShift validator,
-registered deterministic experiment, Bob MCP seam, and local/private Physics Console are
-implemented and tested. Live Granite evidence, genuine Bob provenance, a tuned external
-framework baseline, public GitHub publication, SkillsBuild completion, and the three-minute
+registered deterministic experiment, pinned nominal LangGraph comparator, Bob MCP seam, and
+local/private Physics Console are implemented and tested. Live Granite evidence, genuine Bob
+provenance, a tuned faulted external-framework benchmark, public GitHub publication, SkillsBuild
+completion, and the three-minute
 submission video remain release blockers. Track them in the
 [submission checklist](docs/submission-checklist.md) and [roadmap](ROADMAP.md).

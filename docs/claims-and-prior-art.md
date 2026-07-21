@@ -11,10 +11,10 @@
 
 ## Defensible thesis
 
-> Agent Physics combines adaptive topology selection, multi-resource critical-path scheduling,
-> explicit context movement, and effect safety in a framework-neutral execution envelope—and
-> exposes the decisions and distance from an explicitly labeled planning-model bound as
-> evidence.
+> Agent Physics combines multi-resource critical-path scheduling, explicit context movement,
+> conservative admission, durable local restart, and effect safety behind a strict
+> framework-neutral workflow envelope—and exposes decisions and distance from an explicitly
+> labeled planning-model bound as evidence.
 
 The deterministic simulator's bound uses selected p95 profile estimates. It is not a
 measured physical lower bound and is never compared directly with live runtime data.
@@ -23,6 +23,9 @@ Individual ingredients have substantial prior art. The contribution must be judg
 integration, runtime behavior, developer contract, effect invariants, and reproducible evidence.
 
 ## Required comparisons
+
+This is the target comparison program, not a list of completed public results. Topology and
+speculation ablations remain blocked until those capabilities exist.
 
 - A sequential ReAct-style loop.
 - A tuned static graph using native parallelism, not a deliberately weak baseline.

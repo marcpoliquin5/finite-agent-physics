@@ -3,9 +3,11 @@
 Evidence-first demonstration surface for FINITE, the constraint-native agent
 orchestration kernel. The interface exposes the deterministic StormShift
 simulation, feasibility witness, resource pressure controls, and effect-safety
-boundary used in the hackathon demonstration. Its evidence rack exposes the
-complete 450-record paired deterministic design without presenting the
-development-reference policies as external-framework baselines.
+boundary used in the hackathon demonstration. Its evidence rack exposes 1,080
+precomputed pressure decisions, a 10,000-transition resource ledger, a seeded
+declared-quota corpus, chained modeled replans, one public-fact explanation per
+scheduler event, and the complete 450-record paired deterministic design. It
+does not present development-reference policies as external-framework baselines.
 
 All incident data shown by this site is fictional. The current console is a
 deterministic simulation and does not execute or publish emergency actions.

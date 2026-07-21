@@ -51,6 +51,7 @@ type ArtifactPayload = {
   claim_status: string;
   fictional_fixture: boolean;
   external_systems_called: boolean;
+  bob_mcp_tool_count: number;
   witnesses: Record<ScenarioId, Witness>;
   decisions: Record<ScenarioId, Record<string, Decision>>;
   protected_minima: {
@@ -84,6 +85,44 @@ type ArtifactPayload = {
     final_state: string;
     physical_apply_count: number;
     external_effects_possible: boolean;
+  };
+  resource_ledger_stress: {
+    transition_count: number;
+    independent_replay_passed: boolean;
+    trace_digest: string;
+    scope: string;
+  };
+  provider_quota_stress: {
+    model_scope: string;
+    aggregate_guard_scope: string;
+    logical_calls: number;
+    admission_requests: number;
+    settled_calls: number;
+    refused_admissions: number;
+    reset_suppressed_retries: number;
+    event_count: number;
+    event_digest: string;
+  };
+  replanning_witness: {
+    event_count: number;
+    final_revision: number;
+    first_disposition: string;
+    first_reason_code: string;
+    shed_task_ids: string[];
+    second_disposition: string;
+    second_reason_code: string;
+    state_chain_verified: boolean;
+    first_decision_digest: string;
+    second_decision_digest: string;
+    scope: string;
+  };
+  decision_explanation_evidence: {
+    case_count: number;
+    record_count: number;
+    one_record_per_event: boolean;
+    reasoning_access: boolean;
+    bundle_ids: string[];
+    scope: string;
   };
 };
 
@@ -197,7 +236,7 @@ export default function Home() {
         <div className="topbar-meta">
           <span className="sim-label"><i /> deterministic simulation</span>
           <span className="commit-label">ARTIFACT {digestState.toUpperCase()}</span>
-          <span className="mcp-label">BOB MCP - 10 TOOLS</span>
+          <span className="mcp-label">BOB MCP - {artifact.bob_mcp_tool_count} TOOLS</span>
         </div>
       </header>
 
@@ -423,11 +462,48 @@ export default function Home() {
         </article>
       </section>
 
+      <section className="recovery-rack" aria-labelledby="recovery-title">
+        <header>
+          <div>
+            <span className="panel-kicker">MODELED RECOVERY / MONOTONIC STATE CHAIN</span>
+            <h2 id="recovery-title">Adapt once. Refuse before breaking promises.</h2>
+          </div>
+          <span className={`simulation-chip ${artifact.replanning_witness.state_chain_verified ? "" : "simulation-chip-alert"}`}>
+            {artifact.replanning_witness.state_chain_verified ? "CHAIN VERIFIED" : "CHAIN INVALID"}
+          </span>
+        </header>
+        <div className="recovery-flow">
+          <article>
+            <span>REV 01 / MODELED WATSONX CAPACITY DROP</span>
+            <strong>{artifact.replanning_witness.first_disposition.toUpperCase()}</strong>
+            <p>
+              Shed <b>{artifact.replanning_witness.shed_task_ids.join(", ")}</b>; preserve
+              every unfinished mandatory task under the remaining envelope.
+            </p>
+            <small>{shortDigest(artifact.replanning_witness.first_decision_digest)}</small>
+          </article>
+          <i aria-hidden="true">-&gt;</i>
+          <article className="recovery-refusal">
+            <span>REV 02 / SECOND CAPACITY DROP</span>
+            <strong>{artifact.replanning_witness.second_disposition.toUpperCase()}</strong>
+            <p>
+              Further loss makes the residual plan inadmissible. FINITE preserves settled
+              usage and refuses instead of silently dropping required work.
+            </p>
+            <small>{shortDigest(artifact.replanning_witness.second_decision_digest)}</small>
+          </article>
+        </div>
+        <p>
+          This is deterministic residual-graph planning over caller-supplied progress—not live
+          executor mutation or provider telemetry.
+        </p>
+      </section>
+
       <section className="evidence-rack" aria-labelledby="evidence-title">
         <header>
           <div>
             <span className="panel-kicker">REGISTERED EVIDENCE / DESCRIPTIVE ONLY</span>
-            <h2 id="evidence-title">No cherry-picked victory lap.</h2>
+            <h2 id="evidence-title">Four physics layers. One sealed artifact.</h2>
           </div>
           <span className="trace-digest">
             {shortDigest(artifact.registered_fault_experiment.experiment_config_digest)}
@@ -435,15 +511,23 @@ export default function Home() {
         </header>
         <div className="evidence-grid">
           <article><strong>{pressureStateCount.toLocaleString()}</strong><span>kernel-generated pressure states</span></article>
+          <article><strong>{artifact.resource_ledger_stress.transition_count.toLocaleString()}</strong><span>resource-ledger transitions</span></article>
+          <article><strong>{artifact.provider_quota_stress.logical_calls.toLocaleString()}</strong><span>declared-quota logical calls</span></article>
+          <article><strong>{artifact.decision_explanation_evidence.record_count}</strong><span>post-hoc numeric explanation records</span></article>
+          <article><strong>{artifact.replanning_witness.final_revision}</strong><span>chained modeled replans</span></article>
           <article><strong>{artifact.registered_fault_experiment.raw_record_count}</strong><span>complete experiment records</span></article>
           <article><strong>{artifact.registered_fault_experiment.paired_seed_count}</strong><span>frozen paired seeds</span></article>
           <article><strong>{artifact.registered_fault_experiment.condition_count}</strong><span>control + fault conditions</span></article>
           <article><strong>{artifact.registered_fault_experiment.policy_count}</strong><span>simulator policies</span></article>
+          <article><strong>{artifact.bob_mcp_tool_count}</strong><span>Bob-facing local tools</span></article>
+          <article><strong>{artifact.provider_quota_stress.reset_suppressed_retries}</strong><span>reset-window retry suppressions</span></article>
           <article><strong>0</strong><span>live or external calls represented</span></article>
         </div>
         <p>
-          Adaptive is the paired-analysis baseline. Static-parallel and sequential are development
-          references, not tuned external-framework baselines. Revision provenance is
+          The quota guard and replanner are declared local models; explanation records contain
+          public post-hoc facts, never chain-of-thought. Adaptive is the paired-analysis baseline;
+          static-parallel and sequential are development references, not tuned external-framework
+          baselines. Revision provenance is
           {" "}<b>{artifact.registered_fault_experiment.revision_provenance}</b>.
         </p>
       </section>

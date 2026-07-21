@@ -70,7 +70,7 @@ processes without forcing teams into a new graph authoring framework.
 
 - Full Python suite with an enforced 85% statement-coverage floor; insert the exact final
   test count and coverage from the tagged release check.
-- Real MCP initialize/list/call protocol test covering ten Bob-facing tools.
+- Real MCP initialize/list/call protocol test covering 13 Bob-facing tools.
 - Digest-bound console artifact with 1,080 kernel-generated pressure states.
 - Locked console dependencies with a zero-vulnerability npm audit at verification time.
 - No external effects or agency systems are called by the demo.

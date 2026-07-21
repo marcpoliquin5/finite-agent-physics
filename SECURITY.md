@@ -5,18 +5,23 @@ healthcare, finance, public communications, or other consequential systems.
 
 ## Reporting
 
-Until a dedicated security contact exists, open a private GitHub security advisory on the
-repository. Do not place secrets, exploit payloads, or private data in a public issue.
+Use GitHub's private vulnerability-reporting flow for this repository. If that flow is not yet
+available, open a minimal public issue requesting a private contact channel without including
+secrets, exploit payloads, operational data, or private information.
+
+Security fixes are best-effort for the current default branch and latest tagged pre-release.
+Older snapshots are unsupported.
 
 ## Prototype guarantees and non-guarantees
 
 - Graphs and model outputs are treated as untrusted input.
 - The validator fails closed for malformed graphs and unsafe declared effects.
-- Irreversible declared effects must name an approval gate and idempotency key; the current
-  simulator does not authenticate or commit either one.
-- The current simulator does not execute external effects.
-- It does not yet provide process isolation, authentication, secret management, a durable
-  transactional outbox, remote exactly-once semantics, or production-grade tenancy.
+- Irreversible declared effects must name an approval gate and idempotency key.
+- The SQLite effect kernel implements durable local intent, approval, fencing, outbox, ambiguity,
+  and compensation transitions against a simulation-only target. It does not execute a real
+  external effect or establish remote exactly-once delivery.
+- The prototype does not yet provide process isolation, authenticated multi-tenancy, managed
+  secrets, distributed quota/lease coordination, or production-grade authorization.
 - A certificate digest is an integrity identifier, not a digital signature or trust anchor.
 
 ## Secret hygiene

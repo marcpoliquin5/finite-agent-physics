@@ -14,6 +14,8 @@
   --amber: #ffbd66;
   --red: #ff6577;
   --violet: #b99cff;
+  --font-geist-sans: "Segoe UI", "Helvetica Neue", Arial;
+  --font-geist-mono: "Cascadia Mono", "SFMono-Regular", Consolas;
 }
 
 * {
@@ -665,12 +667,14 @@ footer div {
 
 .effect-proof strong { font-size: 10px; font-weight: 530; }
 
+.recovery-rack,
 .evidence-rack {
   margin-top: 12px;
   border: 1px solid var(--line);
   background: linear-gradient(120deg, rgba(185, 255, 77, 0.035), rgba(74, 225, 255, 0.015));
 }
 
+.recovery-rack > header,
 .evidence-rack > header {
   display: flex;
   align-items: center;
@@ -680,7 +684,65 @@ footer div {
   padding: 18px;
 }
 
+.recovery-rack h2,
 .evidence-rack h2 { margin: 4px 0 0; font-size: 18px; font-weight: 520; }
+
+.recovery-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.recovery-flow > article {
+  display: grid;
+  min-height: 170px;
+  align-content: center;
+  gap: 9px;
+  padding: 24px;
+}
+
+.recovery-flow > i {
+  display: grid;
+  align-items: center;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-style: normal;
+}
+
+.recovery-flow article > span,
+.recovery-flow article > small {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.recovery-flow article > strong {
+  color: var(--acid);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 30px;
+  font-weight: 540;
+}
+
+.recovery-flow article > p {
+  max-width: 560px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.recovery-flow article > p b { color: var(--text); font-weight: 540; }
+.recovery-flow .recovery-refusal > strong { color: var(--amber); }
+
+.recovery-rack > p {
+  margin: 0;
+  border-top: 1px solid var(--line-soft);
+  padding: 12px 18px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
 
 .evidence-grid {
   display: grid;
@@ -697,6 +759,8 @@ footer div {
 }
 
 .evidence-grid article:last-child { border-right: 0; }
+.evidence-grid article:nth-child(6n) { border-right: 0; }
+.evidence-grid article:nth-child(-n + 6) { border-bottom: 1px solid var(--line-soft); }
 .evidence-grid strong { color: var(--acid); font-family: var(--font-geist-mono), monospace; font-size: 30px; font-weight: 540; }
 .evidence-grid span { color: var(--muted); font-size: 9px; line-height: 1.45; text-transform: uppercase; }
 
@@ -731,8 +795,8 @@ footer div { flex-wrap: wrap; justify-content: flex-end; gap: 16px; font-family:
   .metric-card:nth-child(4), .metric-card:nth-child(5) { border-top: 1px solid var(--line); }
   .workspace-grid, .lower-grid { grid-template-columns: 1fr; }
   .evidence-grid { grid-template-columns: repeat(3, 1fr); }
-  .evidence-grid article:nth-child(3) { border-right: 0; }
-  .evidence-grid article:nth-child(-n + 3) { border-bottom: 1px solid var(--line-soft); }
+  .evidence-grid article:nth-child(3n) { border-right: 0; }
+  .evidence-grid article:nth-child(-n + 9) { border-bottom: 1px solid var(--line-soft); }
   .pressure-panel { min-height: auto; }
 }
 
@@ -757,10 +821,14 @@ footer div { flex-wrap: wrap; justify-content: flex-end; gap: 16px; font-family:
   .effect-flow { grid-template-columns: 1fr 1fr; row-gap: 10px; }
   .effect-stage > i { display: none; }
   .evidence-rack > header { align-items: flex-start; flex-direction: column; }
+  .recovery-rack > header { align-items: flex-start; flex-direction: column; }
+  .recovery-flow { grid-template-columns: 1fr; }
+  .recovery-flow > i { display: none; }
+  .recovery-flow > article:first-child { border-bottom: 1px solid var(--line-soft); }
   .evidence-grid { grid-template-columns: 1fr 1fr; }
   .evidence-grid article:nth-child(odd) { border-right: 1px solid var(--line-soft); }
   .evidence-grid article:nth-child(even) { border-right: 0; }
-  .evidence-grid article:nth-child(-n + 4) { border-bottom: 1px solid var(--line-soft); }
+  .evidence-grid article:nth-child(-n + 10) { border-bottom: 1px solid var(--line-soft); }
   footer { align-items: flex-start; flex-direction: column; padding-top: 24px; }
   footer div { justify-content: flex-start; }
 }

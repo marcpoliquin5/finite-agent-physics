@@ -1,8 +1,11 @@
-# Agent Physics: 50-capability competition program
+# Agent Physics: 60-capability competition program
 
 This is a coherent systems program, not a promise that every item will be production-complete
 by July 31. `P0` items form the judged vertical slice; `P1` items deepen the evidence and
 experience; `P2` items demonstrate a credible post-hackathon trajectory.
+
+The dated [competitive landscape and 45-gap register](docs/competitive-landscape.md) determines
+release order: eligibility and judge proof come before additional framework breadth.
 
 ## A. Constraint language and compiler
 
@@ -73,6 +76,19 @@ experience; `P2` items demonstrate a credible post-hackathon trajectory.
 48. **P0 - Reproducible baselines:** sequential ReAct and tuned static LangGraph under identical constraints.
 49. **P0 - Statistical benchmark report:** p50/p95, success, quality, cost, context, SLO misses, and confidence intervals.
 50. **P0 - Submission-grade delivery:** public repo, tests, architecture, Bob evidence, accessible demo, and three-minute video.
+
+## G. Integrated proof and missing physics
+
+51. **P0 - IBM structural proof chain:** bind one genuine Bob-driven lifecycle to one live Granite receipt, run ID, validator result, artifacts, tests, and commit.
+52. **P0 - Adaptive recovery drill:** combine a 429 burst, budget cut, and crash without replaying settled work or effects.
+53. **P0 - Independent whole-run verifier:** validate sealed resources, outputs, causality, context, approvals, effects, and replay without trusting the scheduler.
+54. **P1 - Compute-resource physics:** admit against typed CPU-ms, peak RAM/VRAM, storage, and IO budgets with overflow-safe units.
+55. **P1 - Transport physics:** account for network bytes, bandwidth, RTT, egress, locality, and sovereignty as first-class constraints.
+56. **P0 - Semantic safety obligations:** block completion/effects when entailment, citation, bilingual, freshness, accessibility, or safety validation fails.
+57. **P0 - Framework conformance:** round-trip a representative LangGraph or BeeAI workflow or refuse with explicit semantic-loss diagnostics.
+58. **P0 - Untrusted-evidence firewall:** propagate taint so prompt injection cannot broaden authority, tools, policy, approvals, or effects.
+59. **P0 - Judge-path reliability:** verify anonymous access, sealed fallback, fresh-clone startup, captions, keyboard/screen-reader use, contrast, links, secrets, and licensing.
+60. **P1 - Failure-domain and overhead evidence:** model correlated provider/model/region/tool/data failures and measure control-plane CPU, memory, latency, trace bytes, and storage growth.
 
 ## Definition of “first-place ready”
 

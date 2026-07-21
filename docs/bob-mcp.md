@@ -30,8 +30,9 @@ initialize handshake, lists tools, and calls `finite_capabilities`.
 4. Restart `finite-agent-physics` from Bob's MCP panel.
 5. Ask Bob to call `finite_capabilities` first.
 6. Call `finite_preflight` once with the default envelope and once with `max_tokens=1`.
-7. Call `finite_executor_drill`, `finite_stormshift_validate`, and
-   `finite_fault_experiment`; retain Bob's tool-call evidence and returned digests.
+7. Call `finite_executor_drill`, `finite_stormshift_validate`,
+   `finite_replanning_drill`, `finite_quota_corpus`, and
+   `finite_decision_explanation_drill`; retain Bob's tool-call evidence and returned digests.
 8. Call `finite_verify` and retain the fail-closed verification result.
 
 The expected contrast is a feasible schedule witness versus a conservative pre-spend
@@ -52,6 +53,12 @@ refusal. The refusal is deliberately not called a proof of mathematical infeasib
   across 30 paired seeds and three development policies (450 raw records).
 - `finite_executor_drill`: durable local fixture execution and restart reconstruction; the
   publication task stops in `awaiting_effects` with a `PROPOSED` intent.
+- `finite_quota_corpus`: seeded declared-RPM/TPM/concurrency/reset/retry accounting with
+  independent local event replay; never provider telemetry.
+- `finite_replanning_drill`: one modeled StormShift capacity loss that sheds optional work,
+  preserves mandatory work, and binds the residual decision to a durable state revision.
+- `finite_decision_explanation_drill`: one content-addressed public-fact record per scheduler
+  event for nominal, degraded, or refused runs; never chain-of-thought.
 
 There is intentionally no external effect-commit tool and no generic provider-backed tool
 named `run` yet. Those surfaces remain blocked until live adapter-side caps, production IAM,

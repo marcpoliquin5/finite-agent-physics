@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 from pathlib import Path
 
@@ -76,6 +77,25 @@ def build_parser() -> argparse.ArgumentParser:
             "report dirty state"
         ),
     )
+    langgraph = subparsers.add_parser(
+        "langgraph-baseline",
+        help="run the pinned static LangGraph StormShift conformance comparator",
+    )
+    langgraph.add_argument(
+        "--run-id",
+        default="stormshift-langgraph-static-cli-v1",
+        help="unique checkpoint thread/run identifier",
+    )
+    langgraph.add_argument(
+        "--checkpoint",
+        default=":memory:",
+        help="SQLite checkpoint path; defaults to an in-memory database",
+    )
+    langgraph.add_argument(
+        "--output",
+        type=Path,
+        help="optional JSON output path; stdout is always a compact verification receipt",
+    )
     return parser
 
 
@@ -134,6 +154,36 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0 if bundle.verify() else 1
+    if args.command == "langgraph-baseline":
+        # Keep LangGraph optional for every other CLI path. The comparator module
+        # raises a focused installation error when its pinned extra is absent.
+        from .langgraph_baseline import run_langgraph_stormshift_baseline
+
+        record = asyncio.run(
+            run_langgraph_stormshift_baseline(
+                run_id=args.run_id,
+                checkpoint_path=args.checkpoint,
+            )
+        )
+        payload = record.as_dict()
+        if args.output is not None:
+            output = args.output.resolve()
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(
+            json.dumps(
+                {
+                    "verified": record.verify_digest(),
+                    "framework": record.framework,
+                    "framework_version": record.framework_version,
+                    "comparator_kind": record.comparator_kind,
+                    "record_digest": record.record_digest,
+                    "output": str(args.output.resolve()) if args.output is not None else None,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0 if record.verify_digest() else 1
     return 2
 
 

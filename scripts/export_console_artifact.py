@@ -8,10 +8,23 @@ from dataclasses import replace
 from pathlib import Path
 
 from agent_physics.examples import miami_eoc_envelope, miami_eoc_graph
+from agent_physics.decision_explanations import explain_schedule
 from agent_physics.experiments import run_registered_experiments, summarize_experiments
 from agent_physics.feasibility import FeasibilityAnalyzer
 from agent_physics.ledger import verify_conservation
-from agent_physics.mcp_server import finite_effect_drill
+from agent_physics.mcp_server import finite_capabilities, finite_effect_drill
+from agent_physics.provider_quota import (
+    GLOBAL_GUARD_SCOPE,
+    MODEL_SCOPE,
+    run_seeded_burst_corpus,
+)
+from agent_physics.replanning import (
+    EventDrivenReplanner,
+    ProviderCapacityEvent,
+    RunProgressSnapshot,
+)
+from agent_physics.resource_ledger import generate_stress_corpus
+from agent_physics.run_store import Usage
 from agent_physics.scheduler import Scheduler
 from agent_physics.stormshift import (
     StormShiftValidator,
@@ -166,12 +179,89 @@ def build_payload() -> dict[str, object]:
     experiment_summary = summarize_experiments(experiment_records)
     experiment_design = experiment_summary["design"]
     effect_drill = finite_effect_drill("hard")
+    capabilities = finite_capabilities()
+    resource_corpus = generate_stress_corpus()
+    resource_replay = resource_corpus.verify()
+    quota_corpus = run_seeded_burst_corpus()
+
+    replanner = EventDrivenReplanner()
+    replan_envelope = replace(miami_eoc_envelope(), max_context_bytes=29_500)
+    initial_state = replanner.initial_state(
+        graph,
+        replan_envelope,
+        run_id="console-stormshift-replanning",
+    )
+    first_progress = RunProgressSnapshot.from_state(
+        initial_state,
+        completed_task_ids=("incident_intake",),
+        settled_usage=Usage(context_bytes=900),
+        elapsed_ms=2_000,
+    )
+    first_event = ProviderCapacityEvent(
+        "watsonx-capacity-drop",
+        2_000,
+        "simulated-watsonx",
+        1,
+    )
+    first_replan = replanner.replan(
+        graph,
+        initial_state,
+        first_event,
+        first_progress,
+    )
+    second_progress = RunProgressSnapshot.from_state(
+        first_replan.state,
+        completed_task_ids=("incident_intake",),
+        settled_usage=Usage(tokens=150, cost_microusd=200, context_bytes=1_200),
+        elapsed_ms=2_500,
+    )
+    second_event = ProviderCapacityEvent(
+        "fixture-capacity-drop",
+        2_500,
+        "local-fixture",
+        1,
+    )
+    second_replan = replanner.replan(
+        graph,
+        first_replan.state,
+        second_event,
+        second_progress,
+    )
+    replan_verified = replanner.verify_transition(
+        graph,
+        initial_state,
+        first_event,
+        first_progress,
+        first_replan,
+    ) and replanner.verify_transition(
+        graph,
+        first_replan.state,
+        second_event,
+        second_progress,
+        second_replan,
+    )
+
+    explanation_cases = (
+        miami_eoc_envelope(),
+        replace(miami_eoc_envelope(), max_context_bytes=30_000),
+        replace(
+            miami_eoc_envelope(),
+            deadline_ms=6_200,
+            max_parallelism=2,
+            provider_limits=(("simulated-watsonx", 1), ("local-fixture", 4)),
+        ),
+    )
+    explanation_bundles = tuple(
+        explain_schedule(graph, envelope, Scheduler().schedule(graph, envelope))
+        for envelope in explanation_cases
+    )
     return {
         "schema_version": "finite-console-payload/v1",
         "measurement_kind": "deterministic-simulation",
         "claim_status": "descriptive-only",
         "fictional_fixture": True,
         "external_systems_called": False,
+        "bob_mcp_tool_count": capabilities["tool_count"],
         "witnesses": witnesses,
         "decisions": decisions,
         "protected_minima": {
@@ -214,6 +304,44 @@ def build_payload() -> dict[str, object]:
             "final_state": effect_drill["final_state"],
             "physical_apply_count": effect_drill["physical_apply_count"],
             "external_effects_possible": effect_drill["external_effects_possible"],
+        },
+        "resource_ledger_stress": {
+            "transition_count": resource_corpus.transition_count,
+            "independent_replay_passed": resource_replay.passed,
+            "trace_digest": resource_corpus.trace_digest,
+            "scope": "single-process deterministic integer accounting",
+        },
+        "provider_quota_stress": {
+            "model_scope": MODEL_SCOPE,
+            "aggregate_guard_scope": GLOBAL_GUARD_SCOPE,
+            "logical_calls": quota_corpus.logical_calls,
+            "admission_requests": quota_corpus.admission_requests,
+            "settled_calls": quota_corpus.settled_calls,
+            "refused_admissions": quota_corpus.refused_admissions,
+            "reset_suppressed_retries": quota_corpus.reset_suppressed_retries,
+            "event_count": quota_corpus.event_count,
+            "event_digest": quota_corpus.digest,
+        },
+        "replanning_witness": {
+            "event_count": 2,
+            "final_revision": second_replan.state.revision,
+            "first_disposition": first_replan.decision.disposition.value,
+            "first_reason_code": first_replan.decision.reason.code.value,
+            "shed_task_ids": first_replan.decision.shed_task_ids,
+            "second_disposition": second_replan.decision.disposition.value,
+            "second_reason_code": second_replan.decision.reason.code.value,
+            "state_chain_verified": replan_verified,
+            "first_decision_digest": first_replan.decision.decision_digest,
+            "second_decision_digest": second_replan.decision.decision_digest,
+            "scope": "modeled residual-graph replanning, not live executor mutation",
+        },
+        "decision_explanation_evidence": {
+            "case_count": len(explanation_bundles),
+            "record_count": sum(len(bundle.records) for bundle in explanation_bundles),
+            "one_record_per_event": True,
+            "reasoning_access": False,
+            "bundle_ids": tuple(bundle.bundle_id for bundle in explanation_bundles),
+            "scope": "post-hoc public numeric facts, not chain-of-thought",
         },
     }
 

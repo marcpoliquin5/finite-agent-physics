@@ -1,17 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 const title = "FINITE | Agent Physics Control Plane";
 const description =
@@ -43,6 +32,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: origin,
     title,
     description,
+    icons: { icon: "/favicon.svg" },
     openGraph: {
       type: "website",
       title,
@@ -65,9 +55,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

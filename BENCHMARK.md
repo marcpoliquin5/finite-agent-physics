@@ -24,6 +24,15 @@ SLO pass = mandatory validators pass
 The current `static_parallel` simulator policy is a development reference, not the tuned
 LangGraph baseline and not valid for a public superiority claim.
 
+An actual pinned LangGraph nominal comparator is now implemented in
+`src/agent_physics/langgraph_baseline.py` and documented in
+`docs/langgraph-baseline.md`. It uses LangGraph 1.2.9, the SQLite checkpointer 3.1.0, exact
+dependency joins, a frozen highest-quality profile mapping, `max_concurrency=4`, and the same
+StormShift fixture workers and structural validator. Its focused tests establish semantic and
+concurrency-cap conformance only. It has no live model calls, retry policy, admission controller,
+runtime fault injection, or performance measurements, so it is not yet the tuned end-to-end
+baseline described above and supports no FINITE-versus-LangGraph superiority claim.
+
 ## Implemented deterministic slice
 
 The committed experiment runner freezes the `mixed` generated scenario and executes a full

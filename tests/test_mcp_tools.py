@@ -3,11 +3,14 @@ import asyncio
 from agent_physics.mcp_server import (
     finite_capabilities,
     finite_context_drill,
+    finite_decision_explanation_drill,
     finite_effect_drill,
     finite_executor_drill,
     finite_fault_experiment,
     finite_preflight,
+    finite_quota_corpus,
     finite_registered_faults,
+    finite_replanning_drill,
     finite_simulate,
     finite_stormshift_validate,
     finite_verify,
@@ -17,6 +20,15 @@ from agent_physics.mcp_server import (
 def test_mcp_capability_statement_is_explicitly_simulated() -> None:
     payload = finite_capabilities()
     assert payload["stage"] == "deterministic-simulation"
+    assert payload["tool_count"] == 13
+    assert len(payload["tools"]) == payload["tool_count"]
+    assert len(set(payload["tools"])) == payload["tool_count"]
+    assert payload["boundaries"] == {
+        "external_effects_possible": False,
+        "live_provider_calls": False,
+        "reasoning_access": False,
+        "safety": "All current scenario backends and effects are simulated.",
+    }
     assert "live IBM Granite or watsonx execution" in payload["not_implemented"]
 
 
@@ -96,3 +108,77 @@ def test_executor_drill_resumes_all_completed_work_and_only_proposes_effect() ->
     assert result["validation_report_digest"]
     assert result["effect_output"]["effect_state"] == "proposed"
     assert result["effect_output"]["executed_externally"] is False
+
+
+def test_quota_corpus_replays_declared_limits_without_a_provider_call() -> None:
+    first = finite_quota_corpus(seed=13, cycles=8)
+    second = finite_quota_corpus(seed=13, cycles=8)
+    assert first == second
+    assert first["measurement_kind"] == "deterministic-local-quota-model"
+    assert first["live_provider_calls"] is False
+    assert first["provider_quota_measurement"] is False
+    assert first["aggregate_guard_scope"] == (
+        "per_instance_only_not_process_global_or_distributed"
+    )
+    assert first["replay_valid"] is True
+    assert first["logical_calls"] == 200
+    assert first["admission_requests"] > first["logical_calls"]
+    assert first["admitted_calls"] == first["settled_calls"]
+    assert first["refused_admissions"] > 0
+    assert first["reset_suppressed_retries"] > 0
+    assert first["maximum_provider_active"] <= 3
+    assert first["event_digest"]
+
+
+def test_quota_corpus_rejects_an_unbounded_mcp_workload() -> None:
+    try:
+        finite_quota_corpus(cycles=1_001)
+    except ValueError as error:
+        assert "at most 1000" in str(error)
+    else:  # pragma: no cover - assertion branch
+        raise AssertionError("unbounded quota corpus was accepted")
+
+
+def test_stormshift_replanning_drill_preserves_mandatory_work_and_sheds_optional() -> None:
+    result = finite_replanning_drill()
+    assert result["measurement_kind"] == "deterministic-local-replanning-model"
+    assert result["live_provider_calls"] is False
+    assert result["live_executor_mutated"] is False
+    assert result["replay_verified"] is True
+    assert result["revision"] == 1
+    assert result["disposition"] == "scheduled"
+    assert result["reason"]["code"] == "optional_work_shed"
+    assert result["shed_task_ids"] == ("social_signal_scan",)
+    assert result["mandatory_tasks_preserved"] is True
+    assert "incident_intake" not in result["scheduled_task_ids"]
+    assert "social_signal_scan" not in result["scheduled_task_ids"]
+    assert result["remaining_envelope"]["deadline_ms"] == 10_000
+    assert result["remaining_envelope"]["max_context_bytes"] == 28_600
+    assert result["remaining_envelope"]["simulated_watsonx_capacity"] == 1
+
+
+def test_decision_explanation_drill_covers_nominal_degraded_and_refused_modes() -> None:
+    nominal = finite_decision_explanation_drill()
+    degraded = finite_decision_explanation_drill("degraded")
+    refused = finite_decision_explanation_drill("refused", include_records=True)
+
+    for result in (nominal, degraded, refused):
+        assert result["reasoning_access"] is False
+        assert result["live_provider_calls"] is False
+        assert result["bundle_verified"] is True
+        assert result["source_replay_verified"] is True
+        assert result["record_count"] == result["event_count"]
+        assert len(result["record_ids"]) == result["record_count"]
+
+    assert nominal["schedule_success"] is True
+    assert nominal["terminal_action"] == "run_completion"
+    assert nominal["records_included"] is False
+    assert "records" not in nominal
+    assert degraded["schedule_success"] is True
+    assert degraded["skipped_task_ids"] == ("social_signal_scan",)
+    assert degraded["action_counts"]["optional_shed"] == 1
+    assert refused["schedule_success"] is False
+    assert refused["terminal_action"] == "run_refusal"
+    assert refused["records_included"] is True
+    assert len(refused["records"]) == refused["record_count"]
+    assert all(record["reasoning_access"] is False for record in refused["records"])

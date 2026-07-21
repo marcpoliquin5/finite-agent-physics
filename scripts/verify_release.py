@@ -97,6 +97,7 @@ def main() -> int:
             ],
         )
     )
+    checks.append(_run("check Python dependency consistency", [python, "-m", "pip", "check"]))
     checks.append(_run("lint Python", [python, "-m", "ruff", "check", "."]))
     checks.append(
         _run(

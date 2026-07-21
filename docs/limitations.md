@@ -24,7 +24,14 @@ roadmap. This file is the fastest way to distinguish working behavior from futur
   transformations, 30 frozen paired seeds, and three simulator policies.
 - A deterministic 10,000-transition local resource-ledger corpus with independent replay; it
   proves the integer accounting model, not remote-provider containment or distributed locking.
-- A digest-bound console artifact with 1,080 generated pressure-grid states.
+- A deterministic declared-quota corpus for one local guard, including RPM, TPM, concurrency,
+  reset windows, bounded retries, deadlines, settlement, and independent event replay.
+- Digest-bound residual-graph replanning over explicit caller-reported progress and typed
+  capacity, slowdown, failure, and envelope events.
+- One structured post-hoc numeric explanation per deterministic scheduler event, derived from
+  public graph, envelope, schedule, and event fields without hidden-reasoning access.
+- A digest-bound console artifact with 1,080 generated pressure-grid states plus registered
+  resource-ledger, quota, replanning, explanation, and experiment summaries.
 
 ## What the current evidence does not support
 
@@ -41,6 +48,15 @@ roadmap. This file is the fastest way to distinguish working behavior from futur
   entailment, rendered accessibility, or any external agency or delivery-system state.
 - Provider-429 StormShift data is marker-only. Its latency and budget parameter transforms are
   not wired into the StormShift executor or scheduler path.
+- The quota guard does not discover or measure a provider's limits. Its aggregate “global” caps
+  are local to one guard instance; they are not shared cross-process or across guard instances.
+- Replanning does not pause, cancel, lease, or mutate a live executor or remote call. Progress,
+  elapsed time, settled usage, and effect-terminal facts are caller-supplied modeled inputs.
+- Replan event payloads do not yet carry a run ID, target revision, or prior-state digest. The
+  current API assumes trusted routing supplies the event to the intended durable state; adding
+  those bindings requires a versioned event-contract change.
+- Structured explanations cover `Scheduler`/`ScheduleResult` events only—not quota, executor,
+  context, effect-outbox, or resource-ledger events—and do not prove semantic causality.
 
 ## Runtime limitations
 

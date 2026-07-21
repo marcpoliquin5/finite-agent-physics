@@ -12,6 +12,7 @@ from .artifacts import Artifact, EvidenceSet, Sensitivity
 from .benchmark import REGISTERED_FAULTS
 from .context import ContextBudget, ContextObligations, ContextPacker
 from .contracts import EffectClass
+from .decision_explanations import DERIVATION_SCOPE, explain_schedule
 from .effects import (
     AmbiguousCommit,
     ApprovalAuthority,
@@ -23,7 +24,9 @@ from .experiments import run_registered_experiments, summarize_experiments
 from .examples import miami_eoc_envelope, miami_eoc_graph
 from .feasibility import FeasibilityAnalyzer
 from .ledger import verify_conservation
-from .run_store import SQLiteRunStore
+from .provider_quota import GLOBAL_GUARD_SCOPE, MODEL_SCOPE, run_seeded_burst_corpus
+from .replanning import EventDrivenReplanner, ProviderCapacityEvent, RunProgressSnapshot
+from .run_store import SQLiteRunStore, Usage
 from .scheduler import SchedulePolicy, Scheduler
 from .stormshift import (
     BilingualAlert,
@@ -44,6 +47,22 @@ def finite_capabilities() -> dict[str, Any]:
     return {
         "schema_version": "finite-mcp-capabilities/v1",
         "stage": "deterministic-simulation",
+        "tool_count": 13,
+        "tools": (
+            "finite_capabilities",
+            "finite_preflight",
+            "finite_simulate",
+            "finite_verify",
+            "finite_registered_faults",
+            "finite_context_drill",
+            "finite_effect_drill",
+            "finite_stormshift_validate",
+            "finite_fault_experiment",
+            "finite_executor_drill",
+            "finite_quota_corpus",
+            "finite_replanning_drill",
+            "finite_decision_explanation_drill",
+        ),
         "implemented": [
             "constraint and graph validation",
             "protected multi-resource admission",
@@ -58,6 +77,9 @@ def finite_capabilities() -> dict[str, Any]:
             "durable fixture execution with bounded retries, deadlines, cancellation, and resume",
             "StormShift structural capacity, route, declared-accessibility, bilingual-numeric, evidence, and publication validators",
             "complete paired deterministic fault experiments with confidence intervals",
+            "declared local RPM, TPM, concurrency, reset, and bounded-retry quota replay",
+            "event-driven residual-graph replanning over caller-reported progress",
+            "content-addressed post-hoc numeric explanations for replay-verified schedules",
         ],
         "not_implemented": [
             "live IBM Granite or watsonx execution",
@@ -66,8 +88,17 @@ def finite_capabilities() -> dict[str, Any]:
             "cross-run distributed locks",
             "distributed run leases or sandboxed fixture workers",
             "adapter-enforced live-provider token and cost caps",
+            "shared aggregate quotas across processes or quota-guard instances",
+            "live executor mutation from modeled replan decisions",
+            "model chain-of-thought or hidden-reasoning access",
             "physical-runtime measurement",
         ],
+        "boundaries": {
+            "external_effects_possible": False,
+            "live_provider_calls": False,
+            "reasoning_access": False,
+            "safety": "All current scenario backends and effects are simulated.",
+        },
         "safety": "All current scenario backends and effects are simulated.",
     }
 
@@ -414,6 +445,190 @@ async def finite_executor_drill() -> dict[str, Any]:
         }
 
 
+def finite_quota_corpus(seed: int = 13, cycles: int = 48) -> dict[str, Any]:
+    """Replay a seeded burst corpus through declared local RPM/TPM/concurrency limits.
+
+    The corpus includes reset-aware simulated 429s and bounded retries. It uses an integer
+    fixture clock and independently replays its event ledger. It does not inspect or call a
+    provider, and its limits are declared model inputs rather than measured provider quotas.
+    """
+
+    if cycles > 1_000:
+        raise ValueError("cycles must be at most 1000 for this bounded local tool")
+    result = run_seeded_burst_corpus(seed=seed, cycles=cycles)
+    return {
+        "schema_version": "finite-quota-corpus/v1",
+        "measurement_kind": "deterministic-local-quota-model",
+        "model_scope": MODEL_SCOPE,
+        "aggregate_guard_scope": GLOBAL_GUARD_SCOPE,
+        "live_provider_calls": False,
+        "provider_quota_measurement": False,
+        "external_effects_possible": False,
+        "replay_valid": True,
+        "seed": result.seed,
+        "cycles": cycles,
+        "logical_calls": result.logical_calls,
+        "admission_requests": result.admission_requests,
+        "admitted_calls": result.admitted_calls,
+        "refused_admissions": result.refused_admissions,
+        "settled_calls": result.settled_calls,
+        "reset_suppressed_retries": result.reset_suppressed_retries,
+        "maximum_provider_active": result.maximum_provider_active,
+        "maximum_global_active": result.maximum_global_active,
+        "actual_tokens_settled": result.actual_tokens_settled,
+        "event_count": result.event_count,
+        "event_digest": result.digest,
+    }
+
+
+def finite_replanning_drill() -> dict[str, Any]:
+    """Replan the fictional StormShift graph after a modeled mid-run capacity drop.
+
+    The witness starts from one completed intake task and 900 settled context bytes at 2,000
+    milliseconds. Capacity drops to one modeled watsonx slot. The residual plan sheds only the
+    optional social-signal scan while retaining every unfinished mandatory task. This is a pure
+    planning replay: it does not mutate a live executor, call a provider, or create an effect.
+    """
+
+    graph = miami_eoc_graph()
+    envelope = replace(miami_eoc_envelope(), max_context_bytes=29_500)
+    replanner = EventDrivenReplanner()
+    prior = replanner.initial_state(
+        graph,
+        envelope,
+        run_id="finite-mcp-stormshift-replan-v1",
+    )
+    progress = RunProgressSnapshot.from_state(
+        prior,
+        completed_task_ids=("incident_intake",),
+        settled_usage=Usage(context_bytes=900),
+        elapsed_ms=2_000,
+    )
+    event = ProviderCapacityEvent(
+        "watsonx-capacity-drop",
+        2_000,
+        "simulated-watsonx",
+        1,
+    )
+    transition = replanner.replan(graph, prior, event, progress)
+    schedule = transition.decision.schedule
+    scheduled_task_ids = tuple(entry.task_id for entry in schedule.entries) if schedule else ()
+    mandatory_remaining = tuple(
+        task.task_id
+        for task in graph.tasks
+        if not task.optional and task.task_id not in progress.completed_task_ids
+    )
+    remaining = transition.decision.remaining_envelope
+    return {
+        "schema_version": "finite-stormshift-replanning-drill/v1",
+        "measurement_kind": "deterministic-local-replanning-model",
+        "external_effects_possible": False,
+        "live_provider_calls": False,
+        "live_executor_mutated": False,
+        "provider_telemetry_used": False,
+        "event": event.unsigned_payload(),
+        "prior_revision": prior.revision,
+        "revision": transition.state.revision,
+        "completed_task_ids": progress.completed_task_ids,
+        "settled_usage": {
+            "tokens": progress.settled_usage.tokens,
+            "cost_microusd": progress.settled_usage.cost_microusd,
+            "context_bytes": progress.settled_usage.context_bytes,
+        },
+        "elapsed_ms": progress.elapsed_ms,
+        "disposition": transition.decision.disposition.value,
+        "reason": transition.decision.reason.as_dict(),
+        "shed_task_ids": transition.decision.shed_task_ids,
+        "scheduled_task_ids": scheduled_task_ids,
+        "mandatory_remaining_task_ids": mandatory_remaining,
+        "mandatory_tasks_preserved": set(mandatory_remaining).issubset(scheduled_task_ids),
+        "remaining_envelope": (
+            {
+                "deadline_ms": remaining.deadline_ms,
+                "max_tokens": remaining.max_tokens,
+                "max_cost_microusd": remaining.max_cost_microusd,
+                "max_context_bytes": remaining.max_context_bytes,
+                "simulated_watsonx_capacity": remaining.provider_limit(
+                    "simulated-watsonx"
+                ),
+            }
+            if remaining
+            else None
+        ),
+        "prior_state_digest": prior.state_digest,
+        "next_state_digest": transition.state.state_digest,
+        "decision_digest": transition.decision.decision_digest,
+        "replay_verified": replanner.verify_transition(
+            graph,
+            prior,
+            event,
+            progress,
+            transition,
+        ),
+        "limitations": transition.decision.limitations,
+    }
+
+
+def finite_decision_explanation_drill(
+    mode: str = "nominal",
+    include_records: bool = False,
+) -> dict[str, Any]:
+    """Explain every recorded scheduler event with digest-bound public numeric facts.
+
+    ``mode`` accepts ``nominal``, ``degraded``, or ``refused``. Records are reconstructed only
+    after an exact deterministic scheduler replay succeeds. They are post-hoc facts about public
+    inputs and events, not model chain-of-thought, hidden reasoning, or a semantic explanation of
+    model output. Set ``include_records`` to return the complete event-level record list.
+    """
+
+    if mode not in {"nominal", "degraded", "refused"}:
+        raise ValueError("mode must be one of: degraded, nominal, refused")
+    graph = miami_eoc_graph()
+    envelope = miami_eoc_envelope()
+    if mode == "degraded":
+        envelope = replace(envelope, max_context_bytes=30_000)
+    elif mode == "refused":
+        envelope = replace(
+            envelope,
+            deadline_ms=6_200,
+            max_parallelism=2,
+            provider_limits=(("simulated-watsonx", 1), ("local-fixture", 4)),
+        )
+    result = Scheduler().schedule(graph, envelope, SchedulePolicy.ADAPTIVE)
+    bundle = explain_schedule(graph, envelope, result)
+    action_counts = Counter(record.action.value for record in bundle.records)
+    payload: dict[str, Any] = {
+        "schema_version": "finite-decision-explanation-drill/v1",
+        "measurement_kind": "deterministic-post-hoc-recorded-facts",
+        "mode": mode,
+        "external_effects_possible": False,
+        "live_provider_calls": False,
+        "reasoning_access": False,
+        "derivation_scope": DERIVATION_SCOPE,
+        "schedule_success": result.success,
+        "schedule_failure_reason": result.failure_reason,
+        "skipped_task_ids": result.skipped,
+        "cancelled_task_ids": tuple(
+            entry.task_id for entry in result.entries if entry.outcome == "cancelled"
+        ),
+        "event_count": len(result.events),
+        "record_count": len(bundle.records),
+        "action_counts": dict(sorted(action_counts.items())),
+        "terminal_action": bundle.records[-1].action.value,
+        "record_ids": tuple(record.record_id for record in bundle.records),
+        "bundle_id": bundle.bundle_id,
+        "source_graph_digest": bundle.source_graph_digest,
+        "source_envelope_digest": bundle.source_envelope_digest,
+        "source_schedule_digest": bundle.source_schedule_digest,
+        "bundle_verified": bundle.verify(),
+        "source_replay_verified": bundle.verify_against(graph, envelope, result),
+        "records_included": include_records,
+    }
+    if include_records:
+        payload["records"] = [record.as_dict() for record in bundle.records]
+    return payload
+
+
 def build_server() -> Any:
     """Build a FastMCP v1 server while keeping MCP optional for core-library users."""
 
@@ -425,8 +640,8 @@ def build_server() -> Any:
     server = FastMCP(
         "FINITE Agent Physics",
         instructions=(
-            "Use finite_capabilities first. Current tools operate only on a deterministic "
-            "Miami EOC simulation and never perform external effects."
+            "Use finite_capabilities first. Current tools are deterministic local or simulated "
+            "evidence drills; they do not call live providers or perform external effects."
         ),
     )
     server.tool()(finite_capabilities)
@@ -439,6 +654,9 @@ def build_server() -> Any:
     server.tool()(finite_stormshift_validate)
     server.tool()(finite_fault_experiment)
     server.tool()(finite_executor_drill)
+    server.tool()(finite_quota_corpus)
+    server.tool()(finite_replanning_drill)
+    server.tool()(finite_decision_explanation_drill)
     return server
 
 

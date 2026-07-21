@@ -1,4 +1,4 @@
-# FINITE delivery program: 60 capabilities with acceptance gates
+# FINITE delivery program: 62 capabilities plus 8 integrated release proofs
 
 `ROADMAP.md` explains the product surface. This file is the engineering contract. A capability
 is not “done” because a UI element exists; it is done only when its acceptance gate passes.
@@ -39,13 +39,13 @@ is not “done” because a UI element exists; it is done only when its acceptan
 | M30 | Bob MCP integration | Bob calls `physics_preflight/run/status/explain/verify`; demo records real calls. |
 | M31 | Typed REST/SSE interface | Client can submit, stream, approve, cancel, and inspect without database access. |
 | M32 | Physics Console | DAG/Gantt shows critical path, slack, quotas, protected budget, spend, and effect state. |
-| M33 | Structured decision explanations | Every dispatch/skip/downgrade cites numeric facts, never hidden chain-of-thought. |
+| M33 | Structured scheduler-decision explanations | Every deterministic scheduler dispatch, profile selection/downgrade, skip, cancellation, completion, and refusal cites public numeric facts and rule IDs—never hidden chain-of-thought. |
 | M34 | Recorded replay | Replay reproduces control decisions without recalling models or tools. |
 | M35 | Fair benchmark and chaos harness | Same tasks/models/prompts/tools run all baselines under paired seeded faults. |
 | M36 | StormShift workload | Capacity, routing, bilingual, accessibility, grounding, synthesis, and alert preview validate. |
 | M37 | One-command delivery and Bob provenance | Demo starts predictably; Bob prompts, files, tests, commits, and evidence are mapped. |
 
-## Stretch program (S01–S23)
+## Stretch program (S01–S25)
 
 | ID | Capability | Acceptance gate |
 |---|---|---|
@@ -72,6 +72,24 @@ is not “done” because a UI element exists; it is done only when its acceptan
 | S21 | Signed run manifest/AIBOM | Verify detects altered prompt, profile, artifact, policy, tool, or event data. |
 | S22 | Retention and deletion | Expired payloads delete while permitted hashes and lineage remain auditable. |
 | S23 | Counterfactual/Pareto lab | Completed trace answers envelope/provider what-ifs and plots a measured frontier. |
+| S24 | Common-mode failure-domain planner | Profiles name provider/model/region/tool/data failure domains; same-domain replicas are never treated as independent, and hedges require distinct-domain benefit. |
+| S25 | Measured control-plane overhead | Pinned-hardware evidence reports scheduler CPU, memory, decision latency, trace bytes, and storage growth; energy or thermal fields remain unsupported without hardware telemetry. |
+
+## Integrated release proofs (R01–R08)
+
+These are cross-capability judge gates. They prevent a wide roadmap from becoming a collection
+of disconnected demos.
+
+| ID | Release proof | Acceptance gate |
+|---|---|---|
+| R01 | IBM structural proof chain | A genuine Bob session calls FINITE preflight, run, status, explain, and verify; the same run invokes live Granite and emits one redacted receipt binding model ID, usage, latency, artifact, validator result, run ID, Bob prompt, files, tests, and commit. |
+| R02 | Adaptive recovery drill | After two StormShift tasks settle, inject a 429 burst, remaining-budget cut, and coordinator crash; the residual run honors reset windows, never recalls completed work/effects, preserves worst-case unknown usage, and replays to the same digest. |
+| R03 | Independent whole-run verifier | A verifier separate from planning consumes only sealed evidence and checks conservation, outputs, causality, context obligations, approvals, effect uniqueness, and replay identity; any mutated event/resource/artifact/effect field fails closed. |
+| R04 | Compute and transport physics | Typed CPU-ms, peak RAM/VRAM, storage/IO, network bytes, bandwidth, RTT, and egress limits participate in admission; unit mismatch and overflow fail closed, and a coverage matrix labels every dimension modeled, measured, or unsupported. |
+| R05 | Semantic quality and safety obligations | Entailment, citation support, bilingual equivalence, rendered accessibility, freshness, and safety are mandatory completion conditions; numerically consistent but semantically wrong outputs cannot satisfy a task or reach an effect intent. |
+| R06 | Framework conformance benchmark | One representative LangGraph or BeeAI workflow round-trips through typed ports/capabilities or fails with explicit semantic-loss errors; all compared systems use identical prompts, models, tools, cache state, validators, and paired runtime faults. |
+| R07 | Untrusted-evidence firewall | Taint propagates through artifacts, context, and transformations; hostile text cannot grant approval, broaden tools/policy, or create an effect, and every blocked attempt produces a structured denial. |
+| R08 | Judge-path reliability and accessibility | An anonymous public URL supports the full judge path or an unmistakably labeled sealed replay; a fresh clone starts in under ten minutes, and keyboard, screen-reader, contrast, captions, links, secrets, license, and criterion-to-timestamp checks pass. |
 
 ## First-place evaluation gates
 

@@ -4,6 +4,9 @@ The challenge requires IBM Bob to be a core development tool. Architecture assis
 code produced elsewhere does not remove that obligation. The participant must perform and
 record real Bob sessions that materially shape the submitted system.
 
+The copy-ready prompts and evidence gates for the remaining work are in
+[`bob-session-runbook.md`](bob-session-runbook.md).
+
 ## Bob-owned work packages
 
 These packages are intentionally substantial and judge-visible:

@@ -15,12 +15,14 @@ import platform
 import re
 import subprocess
 import sys
+from collections import Counter
 from dataclasses import dataclass, replace
 from importlib import metadata
 from pathlib import Path
 from typing import Iterable, Mapping
 
 from .contracts import RunEnvelope
+from .decision_explanations import DERIVATION_SCOPE, explain_schedule
 from .examples import miami_eoc_envelope, miami_eoc_graph
 from .experiments import (
     CLAIM_STATUS as EXPERIMENT_CLAIM_STATUS,
@@ -34,7 +36,17 @@ from .experiments import (
 )
 from .feasibility import FeasibilityAnalyzer, FeasibilityStatus
 from .ledger import verify_conservation
+from .provider_quota import GLOBAL_GUARD_SCOPE, MODEL_SCOPE, run_seeded_burst_corpus
+from .replanning import (
+    EventDrivenReplanner,
+    ProviderCapacityEvent,
+    ReplanDisposition,
+    ReplanReasonCode,
+    RunProgressSnapshot,
+)
 from .resource_ledger import generate_stress_corpus
+from .run_store import Usage
+from .scheduler import Scheduler
 from .serialization import canonical_json, content_digest, normalize
 from .stormshift import (
     BilingualAlert,
@@ -56,7 +68,7 @@ from .workflow_ir import (
     compile_yaml,
 )
 
-BUNDLE_SCHEMA_VERSION = "finite-judge-evidence/v1"
+BUNDLE_SCHEMA_VERSION = "finite-judge-evidence/v2"
 ENVELOPE_SCHEMA_VERSION = "finite-judge-evidence-envelope/v1"
 DEFAULT_CONSOLE_ARTIFACT = Path("apps/physics-console/app/demo-artifact.json")
 _GIT_OBJECT_PATTERN = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
@@ -344,6 +356,214 @@ def _resource_ledger_evidence() -> dict[str, object]:
             "scope": (
                 "integer single-process logical accounting; no remote-provider containment "
                 "or distributed lock claim"
+            ),
+            "external_systems_called": False,
+        }
+    )
+
+
+def _provider_quota_evidence() -> dict[str, object]:
+    corpus = run_seeded_burst_corpus()
+    if (
+        corpus.logical_calls != 1_200
+        or corpus.admitted_calls != corpus.settled_calls
+        or len(corpus.digest) != 64
+    ):
+        raise RuntimeError("provider quota corpus lost replay or settlement completeness")
+    return _sealed(
+        {
+            "measurement_kind": "deterministic-local-quota-stress",
+            "claim_status": "local-declared-quota-model-only",
+            "model_scope": MODEL_SCOPE,
+            "aggregate_guard_scope": GLOBAL_GUARD_SCOPE,
+            "seed": corpus.seed,
+            "logical_calls": corpus.logical_calls,
+            "admission_requests": corpus.admission_requests,
+            "admitted_calls": corpus.admitted_calls,
+            "refused_admissions": corpus.refused_admissions,
+            "settled_calls": corpus.settled_calls,
+            "reset_suppressed_retries": corpus.reset_suppressed_retries,
+            "maximum_provider_active": corpus.maximum_provider_active,
+            "maximum_global_active": corpus.maximum_global_active,
+            "actual_tokens_settled": corpus.actual_tokens_settled,
+            "event_count": corpus.event_count,
+            "event_digest": corpus.digest,
+            "independent_replay_passed": True,
+            "scope": (
+                "integer single-process declared RPM, TPM, concurrency, reset-window, "
+                "retry, deadline, and settlement accounting"
+            ),
+            "external_systems_called": False,
+        }
+    )
+
+
+def _replanning_evidence() -> dict[str, object]:
+    graph = miami_eoc_graph()
+    envelope = replace(miami_eoc_envelope(), max_context_bytes=29_500)
+    replanner = EventDrivenReplanner()
+    initial = replanner.initial_state(
+        graph,
+        envelope,
+        run_id="judge-stormshift-replanning",
+    )
+    first_progress = RunProgressSnapshot.from_state(
+        initial,
+        completed_task_ids=("incident_intake",),
+        settled_usage=Usage(context_bytes=900),
+        elapsed_ms=2_000,
+    )
+    first_event = ProviderCapacityEvent(
+        "watsonx-capacity-drop",
+        2_000,
+        "simulated-watsonx",
+        1,
+    )
+    first = replanner.replan(graph, initial, first_event, first_progress)
+
+    second_progress = RunProgressSnapshot.from_state(
+        first.state,
+        completed_task_ids=("incident_intake",),
+        settled_usage=Usage(tokens=150, cost_microusd=200, context_bytes=1_200),
+        elapsed_ms=2_500,
+    )
+    second_event = ProviderCapacityEvent(
+        "fixture-capacity-drop",
+        2_500,
+        "local-fixture",
+        1,
+    )
+    second = replanner.replan(graph, first.state, second_event, second_progress)
+
+    first_verified = replanner.verify_transition(
+        graph,
+        initial,
+        first_event,
+        first_progress,
+        first,
+    )
+    second_verified = replanner.verify_transition(
+        graph,
+        first.state,
+        second_event,
+        second_progress,
+        second,
+    )
+    if (
+        not first_verified
+        or not second_verified
+        or first.decision.disposition is not ReplanDisposition.SCHEDULED
+        or first.decision.reason.code is not ReplanReasonCode.OPTIONAL_WORK_SHED
+        or first.decision.shed_task_ids != ("social_signal_scan",)
+        or second.decision.disposition is not ReplanDisposition.REFUSED
+        or second.decision.reason.code is not ReplanReasonCode.SCHEDULER_REFUSED
+        or second.state.revision != 2
+    ):
+        raise RuntimeError("event-driven replanning witness violated its pinned expectations")
+    first_residual = first.decision.residual_graph
+    second_residual = second.decision.residual_graph
+    assert first_residual is not None and second_residual is not None
+    return _sealed(
+        {
+            "measurement_kind": "deterministic-modeled-replanning",
+            "claim_status": "residual-graph-model-only",
+            "event_count": 2,
+            "completed_work_replayed": False,
+            "sealed_effects_replayed": False,
+            "first_transition": {
+                "event_kind": first.decision.event_kind.value,
+                "disposition": first.decision.disposition.value,
+                "reason_code": first.decision.reason.code.value,
+                "shed_task_ids": first.decision.shed_task_ids,
+                "mandatory_residual_task_count": sum(
+                    not task.optional for task in first_residual.tasks
+                ),
+                "decision_digest": first.decision.decision_digest,
+                "state_digest": first.state.state_digest,
+                "transition_verified": first_verified,
+            },
+            "second_transition": {
+                "event_kind": second.decision.event_kind.value,
+                "disposition": second.decision.disposition.value,
+                "reason_code": second.decision.reason.code.value,
+                "shed_task_ids": second.decision.shed_task_ids,
+                "mandatory_residual_task_count": sum(
+                    not task.optional for task in second_residual.tasks
+                ),
+                "decision_digest": second.decision.decision_digest,
+                "state_digest": second.state.state_digest,
+                "transition_verified": second_verified,
+            },
+            "final_revision": second.state.revision,
+            "final_settled_usage": second.state.settled_usage,
+            "final_elapsed_ms": second.state.elapsed_ms,
+            "state_chain_verified": (
+                first.state.prior_state_digest == initial.state_digest
+                and second.state.prior_state_digest == first.state.state_digest
+            ),
+            "scope": first.decision.scope,
+            "limitations": first.decision.limitations,
+            "external_systems_called": False,
+        }
+    )
+
+
+def _decision_explanation_evidence() -> dict[str, object]:
+    graph = miami_eoc_graph()
+    base = miami_eoc_envelope()
+    cases = (
+        ("feasible", base),
+        ("optional-shed", replace(base, max_context_bytes=30_000)),
+        (
+            "refused-with-cancellation",
+            replace(
+                base,
+                deadline_ms=6_200,
+                max_parallelism=2,
+                provider_limits=(("simulated-watsonx", 1), ("local-fixture", 4)),
+            ),
+        ),
+    )
+    evidence: list[dict[str, object]] = []
+    record_total = 0
+    for case_id, envelope in cases:
+        result = Scheduler().schedule(graph, envelope)
+        bundle = explain_schedule(graph, envelope, result)
+        verified = bundle.verify() and bundle.verify_against(graph, envelope, result)
+        if not verified or len(bundle.records) != len(result.events):
+            raise RuntimeError(f"decision explanations failed coverage for {case_id!r}")
+        if any(record.reasoning_access for record in bundle.records):
+            raise RuntimeError("decision explanation claimed access to hidden reasoning")
+        record_total += len(bundle.records)
+        action_counts = Counter(record.action.value for record in bundle.records)
+        evidence.append(
+            {
+                "case_id": case_id,
+                "schedule_success": result.success,
+                "source_event_count": len(result.events),
+                "explanation_record_count": len(bundle.records),
+                "one_record_per_event": True,
+                "action_counts": dict(sorted(action_counts.items())),
+                "bundle_id": bundle.bundle_id,
+                "verified": verified,
+                "terminal_record": bundle.records[-1].as_dict(),
+            }
+        )
+    return _sealed(
+        {
+            "measurement_kind": "deterministic-post-hoc-public-fact-derivation",
+            "claim_status": "structured-explanation-integrity-only",
+            "derivation_scope": DERIVATION_SCOPE,
+            "reasoning_access": False,
+            "case_count": len(evidence),
+            "record_count": record_total,
+            "cases": evidence,
+            "scope": (
+                "public graph, envelope, schedule, and event fields with numeric rule facts"
+            ),
+            "limitations": (
+                "does not expose chain-of-thought, intent, semantic causality, or model "
+                "reasoning; hashes prove content integrity, not producer identity"
             ),
             "external_systems_called": False,
         }
@@ -698,6 +918,9 @@ def build_judge_evidence(
                 "measurement_kinds": [
                     "deterministic-compiler-check",
                     "deterministic-local-ledger-stress",
+                    "deterministic-local-quota-stress",
+                    "deterministic-modeled-replanning",
+                    "deterministic-post-hoc-public-fact-derivation",
                     "deterministic-simulation",
                     "deterministic-fictional-fixture",
                     "deterministic-local-fixture-execution",
@@ -712,6 +935,9 @@ def build_judge_evidence(
             "provenance": _environment_provenance(source_revision),
             "workflow_ir_equivalence": _workflow_ir_evidence(),
             "resource_ledger_stress": _resource_ledger_evidence(),
+            "provider_quota_stress": _provider_quota_evidence(),
+            "event_driven_replanning": _replanning_evidence(),
+            "decision_explanations": _decision_explanation_evidence(),
             "preflight_and_conservation": _preflight_evidence(),
             "stormshift_structural_validation": _stormshift_evidence(),
             "durable_executor_drill": _executor_evidence(),
@@ -721,6 +947,9 @@ def build_judge_evidence(
                 "Every result is local deterministic simulation or fixture execution; no live IBM Granite, watsonx, emergency, or provider call is measured.",
                 "Workflow schema v1 excludes alternatives, speculative branches, and typed artifact ports; those fields fail closed instead of being approximated.",
                 "The 10,000-transition ledger proves a deterministic local integer-accounting model, not remote-provider containment or distributed locking.",
+                "Provider quota evidence is a single-process declared RPM/TPM/concurrency/reset model; it is not live provider telemetry, a distributed lease, or an adapter-enforced cap.",
+                "Event-driven replanning operates on caller-supplied durable progress and modeled residual graphs; it does not pause, cancel, or mutate a live executor or provider call.",
+                "Decision explanations derive post-hoc numeric facts from public scheduler inputs and events; they expose no chain-of-thought, intent, or semantic causality.",
                 "Preflight refusal is conservative under pinned profiles and is not a general proof of mathematical infeasibility.",
                 "Executor workers are trusted in-process fixture callables; this is not a distributed lease or sandbox demonstration.",
                 "The effect drill stops at a durable proposed intent and performs no external delivery.",

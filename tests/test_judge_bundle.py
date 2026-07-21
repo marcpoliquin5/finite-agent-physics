@@ -51,6 +51,31 @@ def test_bundle_combines_complete_labeled_fail_closed_evidence(judge_bundle) -> 
         "5811acacd3df896505265362b7491606094b8b96d7dc25e3c474a92fc38a200d"
     )
 
+    quota = content["provider_quota_stress"]
+    assert quota["logical_calls"] == 1_200
+    assert quota["admitted_calls"] == quota["settled_calls"] == 384
+    assert quota["reset_suppressed_retries"] == 18
+    assert quota["independent_replay_passed"] is True
+    assert quota["model_scope"] == "local_declared_quota_model_not_provider_measurement"
+    assert quota["aggregate_guard_scope"] == (
+        "per_instance_only_not_process_global_or_distributed"
+    )
+
+    replanning = content["event_driven_replanning"]
+    assert replanning["first_transition"]["disposition"] == "scheduled"
+    assert replanning["first_transition"]["shed_task_ids"] == ["social_signal_scan"]
+    assert replanning["second_transition"]["disposition"] == "refused"
+    assert replanning["final_revision"] == 2
+    assert replanning["state_chain_verified"] is True
+    assert replanning["completed_work_replayed"] is False
+
+    explanations = content["decision_explanations"]
+    assert explanations["case_count"] == 3
+    assert explanations["record_count"] == 79
+    assert explanations["reasoning_access"] is False
+    assert all(case["one_record_per_event"] for case in explanations["cases"])
+    assert all(case["verified"] for case in explanations["cases"])
+
     preflight = content["preflight_and_conservation"]
     assert preflight["feasible"]["certificate"]["status"] == "feasible"
     assert preflight["impossible"]["certificate"]["status"] == "refused"

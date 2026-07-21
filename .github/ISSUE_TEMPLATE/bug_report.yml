@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible defect or violated invariant
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include secrets, private data, or vulnerability details. Use private security reporting for security issues.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v0.1.0 or full commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Scheduler or preflight
+        - Quota or resource ledger
+        - Executor or restart
+        - Effect kernel
+        - Evidence or replay
+        - MCP or IBM integration
+        - Physics Console
+        - Benchmark or documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include exact commands, inputs, seed, and observed output.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected invariant or behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: OS, Python/Node version, optional extras, browser
+    validations:
+      required: true
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, personal data, and real emergency-operational data.
+          required: true

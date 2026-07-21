@@ -27,8 +27,10 @@ test("server-renders the FINITE evidence console", async () => {
   assert.match(html, /STORMSHIFT/);
   assert.match(html, /NO EXTERNAL WRITE/);
   assert.match(html, /ARTIFACT\s*(?:<!-- -->)?\s*CHECKING/);
-  assert.match(html, /BOB MCP - 10 TOOLS/);
-  assert.match(html, /No cherry-picked victory lap/);
+  assert.match(html, /BOB MCP -\s*(?:<!-- -->)?\s*13\s*(?:<!-- -->)?\s*TOOLS/);
+  assert.match(html, /Four physics layers/);
+  assert.match(html, /Adapt once/);
+  assert.match(html, />10,000<\/strong>/);
   assert.match(html, />450<\/strong>/);
   assert.match(html, /http:\/\/localhost:3001\/og\.png/);
   assert.doesNotMatch(html, /WITNESS VERIFIED|\bPROOF\b/);
@@ -50,8 +52,15 @@ test("removes disposable starter assets and consumes a verified kernel artifact"
   assert.equal(payload.registered_fault_experiment.raw_record_count, 450);
   assert.equal(payload.registered_fault_experiment.paired_seed_count, 30);
   assert.equal(payload.registered_fault_experiment.revision_provenance, "caller-supplied-unverified");
+  assert.equal(payload.bob_mcp_tool_count, 13);
+  assert.equal(payload.resource_ledger_stress.transition_count, 10_000);
+  assert.equal(payload.provider_quota_stress.logical_calls, 1_200);
+  assert.equal(payload.replanning_witness.final_revision, 2);
+  assert.equal(payload.decision_explanation_evidence.record_count, 79);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   assert.doesNotMatch(layout, /Starter Project|codex-preview/);
+  assert.doesNotMatch(layout, /next\/font/);
+  assert.match(layout, /favicon\.svg/);
   assert.match(page, /demo-artifact\.json/);
   assert.doesNotMatch(page, /const nominalEntries|WITNESS VERIFIED/);
   assert.match(page, /pinned simulation data/i);
