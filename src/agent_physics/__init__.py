@@ -1,12 +1,26 @@
 """Agent Physics: constraint-native scheduling for agentic systems."""
 
 from .contracts import (
+    AdapterCapabilities,
+    AdapterRequirements,
     BackendProfile,
+    CancellationSemantics,
+    CheckpointSemantics,
     Effect,
     EffectClass,
+    InputPort,
+    OutputPort,
     RunEnvelope,
     TaskContract,
+    UsageSemantics,
 )
+from .adaptive_runtime import (
+    AdaptiveReplayReport,
+    AdaptiveRunResult,
+    AdaptiveRuntime,
+    run_adaptive_recovery_drill,
+)
+from .artifact_store import ArtifactProvenance, SQLiteArtifactStore
 from .artifacts import (
     Artifact,
     Claim,
@@ -51,7 +65,15 @@ from .executor import (
     TaskExecutionContext,
     WorkerResult,
 )
+from .control_api import ControlAPIError, ControlPlane, ExecutionRuntime
+from .bob_lifecycle import BobRunService, BobRunSummary
 from .experiments import run_registered_experiments, summarize_experiments
+from .framework_conformance import (
+    FrameworkWrapperManifest,
+    finite_to_wrapper,
+    run_pinned_langgraph_conformance_witness,
+    wrapper_to_finite,
+)
 from .graph import ExecutionGraph, GraphValidationError
 from .feasibility import FeasibilityAnalyzer, FeasibilityCertificate, FeasibilityStatus
 from .ledger import ConservationReport, verify_conservation
@@ -71,6 +93,22 @@ from .provider_quota import (
     RefusalReason as QuotaRefusalReason,
     RetryPolicy as QuotaRetryPolicy,
     run_seeded_burst_corpus,
+)
+from .physical_resources import (
+    PhysicalAdmissionReport,
+    PhysicalAdmissionStatus,
+    PhysicalResourceAnalyzer,
+    analyze_physical_resources,
+)
+from .profile_snapshot import (
+    ProfileSnapshot,
+    ProfileSnapshotRegistry,
+    validate_profile_snapshot,
+)
+from .release_manifest import (
+    ValidatedReleaseManifest,
+    seal_release_manifest,
+    validate_release_manifest,
 )
 from .replanning import (
     DurableRunState,
@@ -101,9 +139,17 @@ from .run_store import SQLiteRunStore, Usage
 from .scheduler import SchedulePolicy, ScheduleResult, Scheduler
 from .stormshift import StormShiftValidator, stormshift_fixture
 from .stormshift_runtime import StormShiftRuntime, StormShiftRuntimeResult
+from .semantic_safety import SemanticSafetyReport, StormShiftSemanticSafetyVerifier
+from .watsonx_worker import WatsonxTaskSpec, WatsonxTaskWorker, watsonx_workers
+from .whole_run_verifier import (
+    WholeRunVerificationReport,
+    seal_whole_run_evidence,
+    verify_whole_run_evidence,
+)
 from .workflow_ir import (
     CompiledWorkflow,
     WorkflowIRValidationError,
+    compile_contracts,
     compile_json,
     compile_python,
     compile_workflow,
@@ -111,6 +157,32 @@ from .workflow_ir import (
 )
 
 __all__ = [
+    "AdapterCapabilities",
+    "AdapterRequirements",
+    "AdaptiveReplayReport",
+    "AdaptiveRunResult",
+    "AdaptiveRuntime",
+    "ArtifactProvenance",
+    "BobRunService",
+    "BobRunSummary",
+    "CancellationSemantics",
+    "CheckpointSemantics",
+    "FrameworkWrapperManifest",
+    "InputPort",
+    "OutputPort",
+    "PhysicalAdmissionReport",
+    "PhysicalAdmissionStatus",
+    "PhysicalResourceAnalyzer",
+    "ProfileSnapshot",
+    "ProfileSnapshotRegistry",
+    "SQLiteArtifactStore",
+    "SemanticSafetyReport",
+    "StormShiftSemanticSafetyVerifier",
+    "UsageSemantics",
+    "ValidatedReleaseManifest",
+    "WatsonxTaskSpec",
+    "WatsonxTaskWorker",
+    "WholeRunVerificationReport",
     "BackendProfile",
     "Artifact",
     "ApprovalAuthority",
@@ -124,6 +196,8 @@ __all__ = [
     "ClaimAssessmentStatus",
     "ClaimStatus",
     "CompiledWorkflow",
+    "ControlAPIError",
+    "ControlPlane",
     "ContextBudget",
     "ContextManifest",
     "ContextObligations",
@@ -141,6 +215,7 @@ __all__ = [
     "EnvelopeChangeEvent",
     "EvidenceSet",
     "ExecutionResult",
+    "ExecutionRuntime",
     "ExecutionGraph",
     "ExplanationAction",
     "EventDrivenReplanner",
@@ -199,16 +274,28 @@ __all__ = [
     "WorkflowIRValidationError",
     "ConservationReport",
     "build_judge_evidence",
+    "analyze_physical_resources",
     "compile_json",
+    "compile_contracts",
     "compile_python",
     "compile_workflow",
     "compile_yaml",
     "explain_schedule",
+    "finite_to_wrapper",
     "generate_stress_corpus",
     "replay_and_verify",
+    "run_adaptive_recovery_drill",
+    "run_pinned_langgraph_conformance_witness",
     "run_seeded_burst_corpus",
     "run_registered_experiments",
     "stormshift_fixture",
     "summarize_experiments",
+    "seal_release_manifest",
+    "seal_whole_run_evidence",
+    "validate_profile_snapshot",
+    "validate_release_manifest",
     "verify_conservation",
+    "verify_whole_run_evidence",
+    "watsonx_workers",
+    "wrapper_to_finite",
 ]

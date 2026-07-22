@@ -14,6 +14,7 @@ from agent_physics.workflow_ir import (
     WORKFLOW_SCHEMA_VERSION,
     WorkflowIRValidationError,
     compile_json,
+    compile_contracts,
     compile_python,
     compile_workflow,
     compile_yaml,
@@ -160,9 +161,10 @@ def test_json_yaml_and_python_compile_to_identical_contracts_and_digest() -> Non
     assert python_result.envelope == json_result.envelope == yaml_result.envelope
     assert python_result.canonical_json == json_result.canonical_json == yaml_result.canonical_json
     assert python_result.digest == json_result.digest == yaml_result.digest
-    assert python_result.digest == hashlib.sha256(
-        python_result.canonical_json.encode("utf-8")
-    ).hexdigest()
+    assert (
+        python_result.digest
+        == hashlib.sha256(python_result.canonical_json.encode("utf-8")).hexdigest()
+    )
 
 
 def test_normalization_is_order_independent_and_preserves_exact_semantics() -> None:
@@ -283,9 +285,7 @@ def test_schema_version_is_mandatory_strict_and_version_gated() -> None:
     ],
 )
 @pytest.mark.parametrize("invalid", [1.5, True])
-def test_envelope_integer_resources_reject_floats_and_booleans(
-    field: str, invalid: Any
-) -> None:
+def test_envelope_integer_resources_reject_floats_and_booleans(field: str, invalid: Any) -> None:
     document = workflow_document()
     document["envelope"][field] = invalid
     with pytest.raises(WorkflowIRValidationError, match=f"{field}.*expected an integer"):
@@ -353,7 +353,9 @@ def test_json_nonfinite_extensions_are_rejected(constant: str) -> None:
 
 
 def test_yaml_nonfinite_number_is_rejected_after_safe_loading() -> None:
-    text = EQUIVALENT_YAML.replace("min_modeled_success_probability: .8", "min_modeled_success_probability: .nan")
+    text = EQUIVALENT_YAML.replace(
+        "min_modeled_success_probability: .8", "min_modeled_success_probability: .nan"
+    )
     with pytest.raises(WorkflowIRValidationError, match="expected a finite number"):
         compile_yaml(text)
 
@@ -436,9 +438,7 @@ def test_duplicate_dependencies_are_rejected_instead_of_silently_deduplicated() 
     [
         lambda document: document["tasks"][0].__setitem__("optional", 1),
         lambda document: document["tasks"][0].__setitem__("description", None),
-        lambda document: document["tasks"][0]["effect"].__setitem__(
-            "requires_approval", "yes"
-        ),
+        lambda document: document["tasks"][0]["effect"].__setitem__("requires_approval", "yes"),
         lambda document: document["envelope"].__setitem__("provider_limits", []),
         lambda document: document.__setitem__(1, "non-string key"),
     ],
@@ -498,3 +498,161 @@ def test_schema_limitations_are_explicit_and_fail_closed() -> None:
         document["tasks"][0][field] = []
         with pytest.raises(WorkflowIRValidationError, match="unknown field"):
             compile_python(document)
+
+
+def _typed_workflow_document() -> dict[str, Any]:
+    document = workflow_document()
+    document["schema_version"] = 2
+    collect = next(task for task in document["tasks"] if task["task_id"] == "collect")
+    review = next(task for task in document["tasks"] if task["task_id"] == "review")
+    collect["output_ports"] = [
+        {
+            "name": "incident",
+            "schema": "stormshift.incident",
+            "schema_version": "1.0.0",
+            "media_type": "application/json",
+        }
+    ]
+    review["input_ports"] = [
+        {
+            "name": "incident",
+            "source_task_id": "collect",
+            "source_port": "incident",
+            "schema": "stormshift.incident",
+            "schema_version": "1.0.0",
+            "media_type": "application/json",
+        }
+    ]
+    return document
+
+
+def test_schema_v2_binds_exact_versioned_artifact_ports() -> None:
+    compiled = compile_python(_typed_workflow_document())
+    review = compiled.graph.by_id["review"]
+    collect = compiled.graph.by_id["collect"]
+
+    assert compiled.schema_version == 2
+    assert review.input_ports[0].source_task_id == "collect"
+    assert review.input_ports[0].schema_version == "1.0.0"
+    assert collect.output_ports[0].media_type == "application/json"
+    normalized = compiled.to_python()
+    normalized_review = next(task for task in normalized["tasks"] if task["task_id"] == "review")
+    assert normalized_review["input_ports"][0]["source_port"] == "incident"
+
+
+def test_in_memory_contracts_round_trip_through_latest_strict_interchange() -> None:
+    original = compile_python(_typed_workflow_document())
+
+    regenerated = compile_contracts(original.graph, original.envelope)
+
+    assert regenerated.schema_version == WORKFLOW_SCHEMA_VERSION
+    assert regenerated.graph == original.graph
+    assert regenerated.envelope == original.envelope
+    assert regenerated.digest == original.digest
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema", "stormshift.other"),
+        ("schema_version", "2.0.0"),
+        ("media_type", "text/plain"),
+    ],
+)
+def test_schema_v2_rejects_incompatible_producer_contract(field: str, value: str) -> None:
+    document = _typed_workflow_document()
+    review = next(task for task in document["tasks"] if task["task_id"] == "review")
+    review["input_ports"][0][field] = value
+
+    with pytest.raises(WorkflowIRValidationError, match="incompatible"):
+        compile_python(document)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("source_task_id", "missing", "missing producer"),
+        ("source_port", "missing", "missing producer port"),
+        ("source_task_id", "publish", "must be a direct dependency"),
+    ],
+)
+def test_schema_v2_rejects_missing_or_unreachable_port_producers(
+    field: str, value: str, message: str
+) -> None:
+    document = _typed_workflow_document()
+    review = next(task for task in document["tasks"] if task["task_id"] == "review")
+    review["input_ports"][0][field] = value
+
+    with pytest.raises(WorkflowIRValidationError, match=message):
+        compile_python(document)
+
+
+def test_schema_v2_rejects_duplicate_port_names_and_v1_rejects_port_fields() -> None:
+    duplicate = _typed_workflow_document()
+    collect = next(task for task in duplicate["tasks"] if task["task_id"] == "collect")
+    collect["output_ports"].append(copy.deepcopy(collect["output_ports"][0]))
+    with pytest.raises(WorkflowIRValidationError, match="output port names must be unique"):
+        compile_python(duplicate)
+
+    legacy = _typed_workflow_document()
+    legacy["schema_version"] = 1
+    with pytest.raises(WorkflowIRValidationError, match="unknown field"):
+        compile_python(legacy)
+
+
+def test_schema_v2_preserves_typed_physical_resource_units() -> None:
+    document = _typed_workflow_document()
+    document["envelope"].update(
+        {
+            "max_cpu_time_ms": 10_000,
+            "max_peak_memory_bytes": 1_000_000,
+            "max_peak_vram_bytes": 2_000_000,
+            "max_storage_read_bytes": 3_000_000,
+            "max_storage_write_bytes": 4_000_000,
+            "max_network_ingress_bytes": 5_000_000,
+            "max_network_egress_bytes": 6_000_000,
+            "available_bandwidth_bps": 10_000_000,
+            "max_network_rtt_ms": 100,
+            "max_egress_cost_microusd": 7_000,
+        }
+    )
+    profile = document["tasks"][0]["profiles"][0]
+    profile_identity = (profile["provider"], profile["name"])
+    profile.update(
+        {
+            "cpu_time_ms": 50,
+            "peak_memory_bytes": 100_000,
+            "peak_vram_bytes": 200_000,
+            "storage_read_bytes": 300_000,
+            "storage_write_bytes": 400_000,
+            "network_ingress_bytes": 500_000,
+            "network_egress_bytes": 600_000,
+            "min_bandwidth_bps": 1_000_000,
+            "network_rtt_ms": 20,
+            "egress_cost_microusd": 700,
+        }
+    )
+
+    compiled = compile_python(document)
+    selected = next(
+        candidate
+        for candidate in compiled.graph.by_id[str(document["tasks"][0]["task_id"])].profiles
+        if (candidate.provider, candidate.name) == profile_identity
+    )
+    assert selected.cpu_time_ms == 50
+    assert selected.peak_vram_bytes == 200_000
+    assert selected.network_egress_bytes == 600_000
+    assert compiled.envelope.available_bandwidth_bps == 10_000_000
+    assert compiled.to_python()["envelope"]["max_network_rtt_ms"] == 100
+
+
+def test_physical_fields_are_v2_only_and_reject_boolean_integer_smuggling() -> None:
+    legacy = workflow_document()
+    legacy["envelope"]["max_cpu_time_ms"] = 10
+    with pytest.raises(WorkflowIRValidationError, match="unknown field"):
+        compile_python(legacy)
+
+    versioned = _typed_workflow_document()
+    versioned["tasks"][0]["profiles"][0]["network_rtt_ms"] = True
+    with pytest.raises(WorkflowIRValidationError, match="expected an integer"):
+        compile_python(versioned)

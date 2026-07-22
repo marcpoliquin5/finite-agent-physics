@@ -1,107 +1,208 @@
-# Architecture
+# FINITE v5 architecture
 
 ## North-star invariant
 
-Agent Physics maximizes useful, verified work subject to a finite execution envelope. It
-must never create compute by hiding it, improve latency by quietly weakening required
-quality, or recover from failure by duplicating an irreversible action.
+FINITE maximizes useful, verified work subject to an explicit finite execution envelope. It must
+never create capacity by hiding usage, improve latency by silently weakening required quality,
+recover by erasing settled work, or complete by duplicating an irreversible action.
 
-## Core mathematical model
+The candidate is intentionally split into probabilistic **workers** and deterministic
+**authority**. A model may propose a graph, result, or action. Only typed validation, admission,
+resource settlement, semantic gates, approval, and durable state may authorize progress.
 
-For a directed acyclic task graph `G = (V, E)`, let `W` be measured selected work, `S` the
-measured critical-path span, and `K` the effective capacity. A theoretical runtime lower
-bound is:
+## Mathematical boundary
 
-```text
-T_lower = max(S, W / K, required network round trips)
-```
-
-The runtime minimizes the gap between observed makespan and `T_lower` while satisfying:
+For a directed acyclic graph `G = (V, E)`, selected work `W`, critical-path span `S`, effective
+capacity `K`, declared transport bytes `B`, bandwidth `b`, and required RTTs `R`:
 
 ```text
-tokens <= token_budget
-cost <= cost_budget
-context_bytes <= context_budget
-parallelism <= worker and provider capacity
-quality(task) >= declared quality floor
-effects obey conflict, idempotency, capability, and approval rules
+T_physical_lower >= max(S, W / K, critical_path((8B / b) + R))
 ```
 
-The first simulator cannot measure that physical bound. It computes a planning-model bound
-from pinned p95 duration estimates and labels it accordingly.
+FINITE keeps two different numbers:
 
-## Planes
+- the **planning-model bound**, derived from selected p95 profile estimates; and
+- the **transport/RTT physical lower bound**, derived from declared integer byte, bandwidth, and
+  RTT fields.
 
-```text
-Goal
-  -> Intent compiler
-  -> Validated task/effect graph
-  -> Admission + feasibility
-  -> Adaptive scheduler <-> Resource governor
-  -> Context fabric      <-> Effect kernel
-  -> Model/tool workers
-  -> Evidence ledger
-  -> Control plane + final artifact
+Neither number is measured wall-clock performance. CPU, RAM, VRAM, storage, and network values
+are declared profile estimates. Energy is explicitly unsupported until hardware telemetry exists.
+
+The admitted execution also satisfies declared caps for tokens, micro-USD, context bytes, CPU
+time, peak RAM/VRAM, storage IO, network transfer, bandwidth, RTT, egress cost, global/provider
+concurrency, quality, reliability, deadlines, and effect policy. Integer dimensions fail closed on
+signed-int64 overflow.
+
+## Ten planes
+
+```mermaid
+flowchart TD
+    Goal["Goal or authored workflow"] --> Compile["1. Compiler + typed ports"]
+    Compile --> Admit["2. Logical + physical admission"]
+    Admit -->|"admitted selection"| Control["3. Adaptive residual control"]
+    Admit -->|"refusal certificate"| Ledger["9. Evidence + verification"]
+    Control <--> Resources["4. Quota + resource accounting"]
+    Control <--> Fabric["5. Artifact + context fabric"]
+    Control --> ABI["6. Adapter capability ABI"]
+    ABI --> Workers["Fixture / Granite / framework worker"]
+    Workers --> Safety["7. Semantic safety gates"]
+    Control --> Effects["8. Effect intent kernel"]
+    Resources --> Ledger
+    Fabric --> Ledger
+    Safety --> Ledger
+    Effects --> Ledger
+    Ledger --> Surfaces["10. MCP + REST/SSE + Console"]
 ```
 
-### Intent compiler
+### 1. Compiler and typed ports
 
-The compiler may use an LLM, but its output is not executable authority. It produces an
-untrusted candidate graph which the deterministic validator checks. Dependencies can be
-suggested automatically; permissions and irreversible effects cannot be self-granted.
+Workflow IR v2 accepts strict Python mappings, duplicate-rejecting JSON, and safe
+duplicate-rejecting YAML. It normalizes one canonical document and SHA-256 digest. Unknown fields,
+unsupported schema versions, cycles, unknown dependencies, duplicate IDs, missing producers, and
+incompatible typed input/output ports are rejected before execution.
 
-### Admission and feasibility
+An LLM may suggest a candidate graph, but it cannot grant capabilities, enlarge a budget, lower a
+required quality floor, or authorize a write.
 
-Before execution, the runtime computes conservative resource bounds. It either admits the
-plan, selects a degraded but valid profile, asks for a changed envelope, or rejects it with
-an explanation. “Start and hope” is not an admissible scheduling strategy.
+### 2. Logical and physical admission
 
-### Adaptive scheduler
+The logical scheduler selects a valid backend profile while protecting mandatory work across
+deadline, token, cost, context, quality, reliability, and concurrency constraints. The physical
+analyzer then checks CPU, memory, VRAM, storage, network, bandwidth, RTT, and egress against the
+same selection. Both run before the runtime calls a worker.
 
-Ready work is ranked by downstream critical-path pressure. Backend selection considers the
-deadline slack, remaining budgets, quality floor, failure history, and provider capacity.
-The scheduler is intentionally allowed to choose one agent when coordination overhead would
-erase the theoretical benefit of a team.
+The analyzer returns a digest-bound coverage matrix that distinguishes estimated, derived, and
+unsupported dimensions. A refusal is a conservative admission refusal, not a general proof that
+no conceivable implementation could succeed.
 
-### Context fabric
+### 3. Adaptive residual control
 
-Tasks exchange typed, immutable artifacts. The fabric accounts for bytes moved, deduplicates
-content, records lineage, and can enforce task-level read sets. This turns context from an
-invisible prompt-construction detail into schedulable data movement.
+The runtime can apply typed capacity, failure, settlement, and envelope events to the durable
+residual state. Every revision retains elapsed time, settled use, completed outputs, deadlines,
+effect boundaries, and prior digests. Optional work may be shed; completed work is never recalled
+merely because the plan changes.
 
-### Effect kernel
+The local controller is a single-coordinator implementation. It does not provide distributed
+leader election, cross-host leases, or high availability.
 
-Every tool call declares an effect class and resource. Conflicting writes serialize.
-Irreversible actions require approval and idempotency. Untrusted content can propose work but
-cannot widen capabilities or authorize an effect.
+### 4. Quota and resource accounting
 
-### Evidence ledger
+Integer ledgers reserve, settle, refund, and refuse use. Independent replay verifies conservation,
+identity, non-negativity, and caps. A separate provider model represents RPM, TPM, concurrency,
+reset windows, retries, and 429 suppression. Its events are declared/modelled data unless a real
+provider receipt says otherwise.
 
-An append-only event stream records graph versions, scheduler decisions, profile estimates,
-reservations, actual use, artifacts, approvals, retries, cancellations, and outcomes. It is
-the basis for replay, debugging, evaluation, and judge-visible proof.
+### 5. Artifact and context fabric
 
-## Current vertical slice
+Immutable artifact identities bind payload bytes, media type, sensitivity, producer, parents, and
+transform lineage. A durable local store provides put/get/dedup and referential-integrity checks.
+The context packer records included and excluded items and refuses when required evidence cannot
+fit or satisfy freshness/trust obligations.
 
-The deterministic discrete-event simulator remains the planning and counterfactual engine.
-The same contracts now also drive an async, fixture-only executor with conservative adaptive
-admission, bounded concurrency, worst-case retry reservation, absolute deadlines, cooperative
-cancellation, actual-use settlement, output validation, and durable SQLite restart state.
-The StormShift runtime maps all ten pure/read nodes to deterministic typed fixture workers,
-produces a response plan and bilingual preview, revalidates the structural report, and leaves
-the eleventh publication node as a proposed intent. A fresh runtime reconstructs all eleven
-durable outputs without another worker call.
+SQLite metadata plus local blobs are a development boundary, not a replicated object store.
 
-Execution is deliberately narrower than simulation claims might suggest:
+### 6. Adapter capability ABI
 
-- one active executor owns a run ID; there is no distributed lease or HA coordinator;
-- injected Python workers are trusted fixtures, not sandboxed model or tool adapters;
-- stored outputs are revalidated on resume and the execution manifest binds the selected
-  profiles, retry policy, validator revision, workers, and effect contracts;
-- declared writes never enter fixture workers: they become durable proposed effect intents;
-- a run with proposed but uncommitted writes reports `awaiting_effects`, not `completed`;
-- the run ledger and effect broker use separate SQLite databases and do not provide a single
-  cross-database atomic transaction.
+Adapters declare cancellation, checkpoint/resume, streaming, usage settlement, supported effect
+classes, fencing, and hidden-retry semantics. Compilation produces an explicit compatibility or
+semantic-loss result; unsupported required semantics block execution.
 
-This boundary lets the repository test control-plane mechanics without disguising fixture
-execution as a production provider runtime.
+The watsonx worker uses one SDK request per FINITE attempt with SDK retries disabled. Because the
+SDK call is synchronous and runs in a thread, Python cannot safely hard-kill it. FINITE can reject
+late settlement, but production hard cancellation requires process isolation.
+
+### 7. Semantic safety gates
+
+StormShift uses bounded model-independent validators for public fields, evidence references,
+freshness, numeric consistency, bilingual equivalence within declared rules, accessibility
+attestations, hostile instructions, and effect readiness. The verifier does not claim general
+natural-language entailment or human-quality translation evaluation.
+
+Unsafe, stale, unsupported, mistranslated, or inaccessible required outputs cannot become a
+committable publication intent in the tested path.
+
+### 8. Effect intent kernel
+
+Declared writes never enter fixture or Granite workers. The runtime creates a durable proposed
+intent. High-risk simulated actions require an exact-scope, time-bound approval grant. Fencing,
+stable idempotency keys, a transactional outbox, ambiguity recovery, and compensation are tested
+against a simulation-only target.
+
+Run and effect ledgers remain separate SQLite transaction domains. Stable idempotency repairs the
+demonstrated crash gap, but there is no cross-database atomic commit.
+
+### 9. Evidence, replay, and release manifest
+
+Append-only events record graph and manifest identities, attempts, public-fact decisions,
+reservations, settlements, outputs, approvals, and effects. The whole-run verifier consumes sealed
+evidence without planner objects, databases, or model/tool calls. Mutation tests fail closed across
+resource, artifact, context, approval, effect, causal, and manifest identities.
+
+Release-candidate tooling additionally inspects wheel/sdist contents, validates package metadata
+and RECORD hashes, rejects unsafe archive paths and secret-like files, and emits deterministic
+checksums, CycloneDX SBOM data, and SLSA-style provenance. These artifacts explicitly declare
+`release_ready=false` until every external gate passes.
+
+### 10. Control surfaces
+
+- **MCP:** 22 local tools, including the Bob lifecycle and v5 evidence drills, over STDIO.
+- **REST:** versioned submit, status, inspect, cancel, effect approval, reference-workflow, and
+  ordered-event endpoints.
+- **SSE:** resumable per-run event streaming with cursor validation and heartbeats.
+- **Console:** a sealed static replay plus an optional live API mode; bearer tokens stay in memory.
+
+The control API uses a configured bearer token and exact-origin CORS. TLS, rate limiting, OIDC,
+tenant RBAC, retention automation, and distributed ownership are deployment responsibilities.
+
+## Durable execution sequence
+
+```mermaid
+sequenceDiagram
+    participant C as Client / Bob
+    participant A as FINITE API or MCP
+    participant R as Runtime
+    participant W as Worker adapter
+    participant V as Validator
+    participant E as Effect broker
+    participant L as Evidence ledger
+    C->>A: submit typed workflow
+    A->>R: compile + admit
+    alt refused
+        R->>L: refusal before worker call
+        R-->>A: binding public facts
+    else admitted
+        R->>L: manifest + reservations
+        R->>W: bounded attempt
+        W-->>R: output + reported use
+        R->>V: validate output
+        V-->>R: pass or structured denial
+        R->>L: settle + artifact lineage
+        opt declared write
+            R->>E: proposed intent only
+            E->>L: awaiting approval/effects
+        end
+        R-->>A: completed or awaiting_effects
+    end
+```
+
+## StormShift reference workload
+
+StormShift is a fictional emergency-operations coordination graph. Ten pure/read tasks produce a
+response plan and bilingual preview; an eleventh publication task is a declared irreversible
+effect. Fixture execution validates the report and stops at `awaiting_effects`. No code in the
+demo contacts Miami-Dade, emergency services, or a public audience.
+
+## Deployment topology
+
+The current executable topology is one Python process, one SQLite run store, an optional separate
+SQLite effect store, local artifact storage, and a Next.js console. A deployed console build exists,
+but its current Sites access policy is owner-only. No public API service or anonymous judge path is
+claimed.
+
+## Stable-v5 boundary
+
+Local implementation is only one part of the release. The stable tag additionally requires real
+Bob provenance, a live Granite receipt, a public immutable GitHub release, anonymous or explicitly
+judge-shared deployment verification, eligibility and SkillsBuild evidence, an accessible public
+video, and submission receipts. The complete conjunctive gates are in
+[`V5_RELEASE_CONTRACT.md`](V5_RELEASE_CONTRACT.md).

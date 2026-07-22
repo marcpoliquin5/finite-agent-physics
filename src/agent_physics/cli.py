@@ -96,6 +96,22 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="optional JSON output path; stdout is always a compact verification receipt",
     )
+    fair = subparsers.add_parser(
+        "fair-benchmark",
+        help="run the preregistered local FINITE/Python/LangGraph comparison",
+    )
+    fair.add_argument(
+        "--output",
+        type=Path,
+        default=Path("artifacts/fair-benchmark"),
+        help="directory for contract, environment, raw records, report, and manifest",
+    )
+    fair.add_argument(
+        "--bootstrap-samples",
+        type=int,
+        default=2_000,
+        help="deterministic paired-bootstrap sample count (minimum 200)",
+    )
     return parser
 
 
@@ -184,6 +200,39 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0 if record.verify_digest() else 1
+    if args.command == "fair-benchmark":
+        # Keep comparator dependencies and benchmark setup off every other CLI path.
+        from .fair_benchmark import build_fair_benchmark_contract, run_fair_benchmark
+
+        contract = build_fair_benchmark_contract(bootstrap_samples=args.bootstrap_samples)
+        output = args.output.resolve()
+        evidence = asyncio.run(run_fair_benchmark(contract, output_directory=output))
+        evidence.verify()
+        executed = [
+            status.system_id
+            for status in evidence.report.system_statuses
+            if status.execution_status == "executed-local"
+        ]
+        unexecuted = [
+            status.system_id
+            for status in evidence.report.system_statuses
+            if status.execution_status != "executed-local"
+        ]
+        print(
+            json.dumps(
+                {
+                    "verified": True,
+                    "evidence_digest": evidence.evidence_digest,
+                    "contract_digest": evidence.contract.contract_digest,
+                    "report_digest": evidence.report.report_digest,
+                    "executed_systems": executed,
+                    "unexecuted_systems": unexecuted,
+                    "output_directory": str(output),
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
     return 2
 
 

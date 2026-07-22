@@ -1,5 +1,8 @@
 # FINITE benchmark protocol (preregistration draft)
 
+Candidate scope: `v5.0.0-rc.1` / Python `5.0.0rc1`. This protocol and any generated local evidence
+do not declare stable v5.0.0 or a benchmark winner.
+
 No chart or performance claim may be published until this protocol is frozen for the tagged
 benchmark release. Changes after freezing require a new protocol version and explanation.
 
@@ -12,30 +15,56 @@ SLO pass = mandatory validators pass
            AND zero unauthorized external effects
 ```
 
-## Systems compared
+## Current executable fair comparison
 
-1. **Sequential ReAct:** one Granite-backed agent with the same tools and output schema.
-2. **Naive async fan-out:** maximum parallelism with bounded retries.
-3. **Tuned static LangGraph:** native parallel branches, persistence, bounded concurrency,
-   retries, and hand-authored routing.
-4. **FINITE:** identical task implementations under the constraint controller.
-5. **Oracle:** simulator only, with future task durations known, to measure scheduling regret.
+[`src/agent_physics/fair_benchmark.py`](src/agent_physics/fair_benchmark.py) preregisters four
+rows in a fixed order:
 
-The current `static_parallel` simulator policy is a development reference, not the tuned
-LangGraph baseline and not valid for a public superiority claim.
+1. **FINITE durable runtime:** actual local invocation required.
+2. **Plain Python sequential control:** actual local invocation required.
+3. **LangGraph static comparator:** actual local invocation only when exactly
+   `langgraph==1.2.9` and `langgraph-checkpoint-sqlite==3.1.0` are installed; otherwise it remains
+   visibly `not-executed` and receives no metrics.
+4. **Alibaba PageAgent:** permanently `unexecuted_reference_only` in this harness, with no version
+   pin, raw records, summary row, inferred zero, ranking, or performance metric.
 
-An actual pinned LangGraph nominal comparator is now implemented in
-`src/agent_physics/langgraph_baseline.py` and documented in
-`docs/langgraph-baseline.md`. It uses LangGraph 1.2.9, the SQLite checkpointer 3.1.0, exact
-dependency joins, a frozen highest-quality profile mapping, `max_concurrency=4`, and the same
-StormShift fixture workers and structural validator. Its focused tests establish semantic and
-concurrency-cap conformance only. It has no live model calls, retry policy, admission controller,
-runtime fault injection, or performance measurements, so it is not yet the tuned end-to-end
-baseline described above and supports no FINITE-versus-LangGraph superiority claim.
+Every metric-bearing row must be backed by an actual invocation on the same digest-bound
+StormShift fixture. The contract binds graph, envelope, fixture, expected comparable output,
+structural validation, source fingerprint, timer, order method, common SLO, and claim boundaries
+before timed trials run. One warmup per executed system is retained in raw evidence but excluded
+from statistics. The 30 preregistered measured seeds are paired and order-balanced; Wilson intervals
+cover pass/guardrail proportions and deterministic bootstrap intervals cover successful-run local
+duration and paired deltas.
 
-## Implemented deterministic slice
+This executable slice measures local orchestration/control-plane wall time for deterministic
+fixture workers. It makes zero model, provider, network, or external-effect calls. FINITE performs
+extra admission, durable persistence, effect handling, and bounded semantic checks that the
+baselines do not; selected declared profiles also differ. Therefore token/cost/context estimates
+are audit fields, not fair measured-resource comparisons, and the report emits no winner or
+superiority claim.
 
-The committed experiment runner freezes the `mixed` generated scenario and executes a full
+Run and verify the byte-stable evidence bundle with:
+
+```powershell
+python -m agent_physics.cli fair-benchmark --output artifacts/fair-benchmark
+```
+
+The executable contract fixes one excluded warmup plus 30 measured paired seeds per executed
+system. The target competition comparison still requires more than this local slice: identical live
+prompts/models/tools/validators and cache/retry rules where live claims are made, hardware
+disclosure, runtime fault injection, and published raw evidence tied to an immutable commit.
+PageAgent remains not executed until a real, workload-equivalent pinned integration exists;
+browser-agent repository features are not a substitute for execution evidence.
+
+The older `static_parallel` simulator policy is only a development reference. The standalone
+pinned comparator in `src/agent_physics/langgraph_baseline.py` and the wrapper/loss ledger in
+`src/agent_physics/framework_conformance.py` establish bounded conformance, not production
+performance or cross-framework semantic equivalence.
+
+## Separate 450-record simulated-fault slice
+
+This is evidence from `experiments.py`, not the actual-invocation fair benchmark above. The
+committed experiment runner freezes the `mixed` generated scenario and executes a full
 Cartesian design with no condition or seed selection:
 
 - one identity-preserving nominal control;

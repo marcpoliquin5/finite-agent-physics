@@ -156,9 +156,7 @@ class EffectBoundary:
             != tuple(sorted(self.intents, key=lambda item: (item.task_id, item.intent_id)))
         ):
             return False
-        return self.boundary_digest == content_digest(
-            EffectBoundary.unsigned_payload(self)
-        )
+        return self.boundary_digest == content_digest(EffectBoundary.unsigned_payload(self))
 
     def as_dict(self) -> dict[str, object]:
         return {**self.unsigned_payload(), "boundary_digest": self.boundary_digest}
@@ -194,6 +192,16 @@ _ENVELOPE_FIELDS = frozenset(
         "max_parallelism",
         "min_modeled_success_probability",
         "provider_limits",
+        "max_cpu_time_ms",
+        "max_peak_memory_bytes",
+        "max_peak_vram_bytes",
+        "max_storage_read_bytes",
+        "max_storage_write_bytes",
+        "max_network_ingress_bytes",
+        "max_network_egress_bytes",
+        "available_bandwidth_bps",
+        "max_network_rtt_ms",
+        "max_egress_cost_microusd",
     }
 )
 _USAGE_FIELDS = frozenset({"tokens", "cost_microusd", "context_bytes"})
@@ -240,9 +248,7 @@ class DurableRunState:
             "elapsed_ms": self.elapsed_ms,
             "effect_boundary": self.effect_boundary.as_dict(),
             "provider_capacities": normalize(self.provider_capacities),
-            "provider_slowdowns_permille": normalize(
-                self.provider_slowdowns_permille
-            ),
+            "provider_slowdowns_permille": normalize(self.provider_slowdowns_permille),
             "failed_task_providers": normalize(self.failed_task_providers),
             "applied_events": normalize(self.applied_events),
         }
@@ -279,9 +285,7 @@ class DurableRunState:
         try:
             _require_exact_fields(payload, _DURABLE_STATE_FIELDS, "state")
             boundary_payload = _mapping(payload["effect_boundary"], "effect_boundary")
-            _require_exact_fields(
-                boundary_payload, _EFFECT_BOUNDARY_FIELDS, "effect_boundary"
-            )
+            _require_exact_fields(boundary_payload, _EFFECT_BOUNDARY_FIELDS, "effect_boundary")
             parsed_intents: list[EffectIntentSeal] = []
             for value in _sequence(boundary_payload["intents"], "intents"):
                 item = _mapping(value, "effect intent")
@@ -296,9 +300,7 @@ class DurableRunState:
             intents = tuple(parsed_intents)
             boundary = EffectBoundary(
                 intents=intents,
-                boundary_digest=_string(
-                    boundary_payload["boundary_digest"], "boundary_digest"
-                ),
+                boundary_digest=_string(boundary_payload["boundary_digest"], "boundary_digest"),
             )
             envelope = _envelope_from_mapping(
                 _mapping(payload["current_envelope"], "current_envelope")
@@ -328,17 +330,11 @@ class DurableRunState:
                 completed_task_ids=_string_tuple(
                     payload["completed_task_ids"], "completed_task_ids"
                 ),
-                skipped_task_ids=_string_tuple(
-                    payload["skipped_task_ids"], "skipped_task_ids"
-                ),
+                skipped_task_ids=_string_tuple(payload["skipped_task_ids"], "skipped_task_ids"),
                 settled_usage=Usage(
                     tokens=_integer(usage_payload["tokens"], "tokens"),
-                    cost_microusd=_integer(
-                        usage_payload["cost_microusd"], "cost_microusd"
-                    ),
-                    context_bytes=_integer(
-                        usage_payload["context_bytes"], "context_bytes"
-                    ),
+                    cost_microusd=_integer(usage_payload["cost_microusd"], "cost_microusd"),
+                    context_bytes=_integer(usage_payload["context_bytes"], "context_bytes"),
                 ),
                 elapsed_ms=_integer(payload["elapsed_ms"], "elapsed_ms"),
                 effect_boundary=boundary,
@@ -396,9 +392,7 @@ class RunProgressSnapshot:
         boundary = state.effect_boundary if effect_boundary is None else effect_boundary
         return cls(
             completed_task_ids=(
-                state.completed_task_ids
-                if completed_task_ids is None
-                else completed_task_ids
+                state.completed_task_ids if completed_task_ids is None else completed_task_ids
             ),
             skipped_task_ids=(
                 state.skipped_task_ids if skipped_task_ids is None else skipped_task_ids
@@ -509,10 +503,7 @@ class EnvelopeChangeEvent:
 
 
 ReplanEvent: TypeAlias = (
-    ProviderSlowdownEvent
-    | TaskFailureEvent
-    | ProviderCapacityEvent
-    | EnvelopeChangeEvent
+    ProviderSlowdownEvent | TaskFailureEvent | ProviderCapacityEvent | EnvelopeChangeEvent
 )
 
 
@@ -525,7 +516,11 @@ class ReplanReason:
     def verify(self) -> bool:
         if type(self) is not ReplanReason:
             return False
-        if type(self.code) is not ReplanReasonCode or type(self.summary) is not str or not self.summary:
+        if (
+            type(self.code) is not ReplanReasonCode
+            or type(self.summary) is not str
+            or not self.summary
+        ):
             return False
         if type(self.facts) is not tuple:
             return False
@@ -627,9 +622,7 @@ class ReplanDecision:
                 _validate_exact_envelope(self.remaining_envelope, "remaining envelope")
             if self.residual_graph is not None:
                 _validate_exact_replan_graph(self.residual_graph)
-            return self.decision_digest == content_digest(
-                ReplanDecision.unsigned_payload(self)
-            )
+            return self.decision_digest == content_digest(ReplanDecision.unsigned_payload(self))
         except (ReplanError, TypeError, ValueError, OverflowError):
             return False
 
@@ -673,7 +666,9 @@ class EventDrivenReplanner:
         if not run_id:
             raise ReplanInvariantError("run_id is required")
         if envelope.validate():
-            raise ReplanInvariantError("initial envelope is invalid: " + "; ".join(envelope.validate()))
+            raise ReplanInvariantError(
+                "initial envelope is invalid: " + "; ".join(envelope.validate())
+            )
         _validate_usage(settled_usage, "initial settled usage")
         boundary = effect_boundary or EffectBoundary.empty()
         self._validate_boundary(graph, boundary)
@@ -882,8 +877,7 @@ class EventDrivenReplanner:
             return False
         return (
             replayed.state.state_digest == transition.state.state_digest
-            and replayed.decision.decision_digest
-            == transition.decision.decision_digest
+            and replayed.decision.decision_digest == transition.decision.decision_digest
         )
 
     def _validate_inputs(
@@ -984,9 +978,7 @@ class EventDrivenReplanner:
             raise ReplanInvariantError("event_id is required")
         if type(event.occurred_at_ms) is not int or event.occurred_at_ms < 0:
             raise ReplanInvariantError("event time must be a non-negative integer")
-        known_providers = {
-            profile.provider for task in graph.tasks for profile in task.profiles
-        }
+        known_providers = {profile.provider for task in graph.tasks for profile in task.profiles}
         if event_type is ProviderSlowdownEvent:
             if type(event.provider) is not str:
                 raise ReplanInvariantError("slowdown provider must be an exact string")
@@ -1148,12 +1140,8 @@ class EventDrivenReplanner:
                 profiles.append(
                     replace(
                         profile,
-                        duration_ms_p50=_scaled_duration(
-                            profile.duration_ms_p50, multiplier
-                        ),
-                        duration_ms_p95=_scaled_duration(
-                            profile.duration_ms_p95, multiplier
-                        ),
+                        duration_ms_p50=_scaled_duration(profile.duration_ms_p50, multiplier),
+                        duration_ms_p95=_scaled_duration(profile.duration_ms_p95, multiplier),
                     )
                 )
             return tuple(profiles)
@@ -1204,9 +1192,7 @@ class EventDrivenReplanner:
                 qualified = tuple(
                     profile for profile in profiles if profile.quality >= task.min_quality
                 )
-                deadline_left = (
-                    None if task.deadline_ms is None else task.deadline_ms - elapsed_ms
-                )
+                deadline_left = None if task.deadline_ms is None else task.deadline_ms - elapsed_ms
                 if not qualified or (deadline_left is not None and deadline_left <= 0):
                     if task.task_id in protected:
                         code = (
@@ -1238,13 +1224,9 @@ class EventDrivenReplanner:
             ):
                 continue
             profiles = transformed_profiles(task)
-            deadline = (
-                None if task.deadline_ms is None else task.deadline_ms - elapsed_ms
-            )
+            deadline = None if task.deadline_ms is None else task.deadline_ms - elapsed_ms
             dependencies = tuple(
-                dependency
-                for dependency in task.dependencies
-                if dependency not in satisfied
+                dependency for dependency in task.dependencies if dependency not in satisfied
             )
             residual_tasks.append(
                 replace(
@@ -1338,6 +1320,16 @@ class EventDrivenReplanner:
                     if capacity > 0
                 )
             ),
+            max_cpu_time_ms=envelope.max_cpu_time_ms,
+            max_peak_memory_bytes=envelope.max_peak_memory_bytes,
+            max_peak_vram_bytes=envelope.max_peak_vram_bytes,
+            max_storage_read_bytes=envelope.max_storage_read_bytes,
+            max_storage_write_bytes=envelope.max_storage_write_bytes,
+            max_network_ingress_bytes=envelope.max_network_ingress_bytes,
+            max_network_egress_bytes=envelope.max_network_egress_bytes,
+            available_bandwidth_bps=envelope.available_bandwidth_bps,
+            max_network_rtt_ms=envelope.max_network_rtt_ms,
+            max_egress_cost_microusd=envelope.max_egress_cost_microusd,
         )
         return remaining, None
 
@@ -1385,9 +1377,7 @@ class EventDrivenReplanner:
             "elapsed_ms": elapsed_ms,
             "effect_boundary": effect_boundary.as_dict(),
             "provider_capacities": normalize(provider_capacities),
-            "provider_slowdowns_permille": normalize(
-                provider_slowdowns_permille
-            ),
+            "provider_slowdowns_permille": normalize(provider_slowdowns_permille),
             "failed_task_providers": normalize(failed_task_providers),
             "applied_events": normalize(applied_events),
         }
@@ -1499,9 +1489,7 @@ def _is_exact_schedule(schedule: ScheduleResult) -> bool:
             and type(event.event_type) is EventType
             and type(event.details) is tuple
             and all(
-                type(detail) is tuple
-                and len(detail) == 2
-                and type(detail[0]) is str
+                type(detail) is tuple and len(detail) == 2 and type(detail[0]) is str
                 for detail in event.details
             )
             for event in schedule.events
@@ -1582,9 +1570,9 @@ def _validate_state_shape(state: DurableRunState) -> None:
     if revisions != tuple(range(1, state.revision + 1)):
         raise ReplanInvariantError("applied event revisions must be contiguous")
     event_ids = tuple(item.event_id for item in state.applied_events)
-    if any(type(item) is not str or not item for item in event_ids) or len(
-        event_ids
-    ) != len(set(event_ids)):
+    if any(type(item) is not str or not item for item in event_ids) or len(event_ids) != len(
+        set(event_ids)
+    ):
         raise ReplanInvariantError("applied event IDs must be nonempty and unique")
     if any(not _is_sha256(item.event_digest) for item in state.applied_events):
         raise ReplanInvariantError("applied event digests must be SHA-256")
@@ -1623,10 +1611,7 @@ def _validate_state_shape(state: DurableRunState) -> None:
         if tuple(sorted(pairs)) != pairs or len(dict(pairs)) != len(pairs):
             raise ReplanInvariantError(f"{label} must be canonical and unique")
     if any(
-        type(provider) is not str
-        or not provider
-        or type(capacity) is not int
-        or capacity < 0
+        type(provider) is not str or not provider or type(capacity) is not int or capacity < 0
         for provider, capacity in state.provider_capacities
     ):
         raise ReplanInvariantError("provider capacities contain an invalid value")
@@ -1640,18 +1625,11 @@ def _validate_state_shape(state: DurableRunState) -> None:
         raise ReplanInvariantError("provider slowdowns contain an invalid value")
     if (
         type(state.failed_task_providers) is not tuple
-        or any(
-            type(pair) is not tuple or len(pair) != 2
-            for pair in state.failed_task_providers
-        )
-        or
-        tuple(sorted(state.failed_task_providers)) != state.failed_task_providers
+        or any(type(pair) is not tuple or len(pair) != 2 for pair in state.failed_task_providers)
+        or tuple(sorted(state.failed_task_providers)) != state.failed_task_providers
         or len(set(state.failed_task_providers)) != len(state.failed_task_providers)
         or any(
-            type(task_id) is not str
-            or not task_id
-            or type(provider) is not str
-            or not provider
+            type(task_id) is not str or not task_id or type(provider) is not str or not provider
             for task_id, provider in state.failed_task_providers
         )
     ):
@@ -1736,13 +1714,31 @@ def _envelope_from_mapping(payload: Mapping[str, object]) -> RunEnvelope:
     return RunEnvelope(
         deadline_ms=_integer(payload["deadline_ms"], "deadline_ms"),
         max_tokens=_integer(payload["max_tokens"], "max_tokens"),
-        max_cost_microusd=_integer(
-            payload["max_cost_microusd"], "max_cost_microusd"
-        ),
-        max_context_bytes=_integer(
-            payload["max_context_bytes"], "max_context_bytes"
-        ),
+        max_cost_microusd=_integer(payload["max_cost_microusd"], "max_cost_microusd"),
+        max_context_bytes=_integer(payload["max_context_bytes"], "max_context_bytes"),
         max_parallelism=_integer(payload["max_parallelism"], "max_parallelism"),
         min_modeled_success_probability=float(probability),
         provider_limits=provider_limits,
+        max_cpu_time_ms=_integer(payload["max_cpu_time_ms"], "max_cpu_time_ms"),
+        max_peak_memory_bytes=_integer(payload["max_peak_memory_bytes"], "max_peak_memory_bytes"),
+        max_peak_vram_bytes=_integer(payload["max_peak_vram_bytes"], "max_peak_vram_bytes"),
+        max_storage_read_bytes=_integer(
+            payload["max_storage_read_bytes"], "max_storage_read_bytes"
+        ),
+        max_storage_write_bytes=_integer(
+            payload["max_storage_write_bytes"], "max_storage_write_bytes"
+        ),
+        max_network_ingress_bytes=_integer(
+            payload["max_network_ingress_bytes"], "max_network_ingress_bytes"
+        ),
+        max_network_egress_bytes=_integer(
+            payload["max_network_egress_bytes"], "max_network_egress_bytes"
+        ),
+        available_bandwidth_bps=_integer(
+            payload["available_bandwidth_bps"], "available_bandwidth_bps"
+        ),
+        max_network_rtt_ms=_integer(payload["max_network_rtt_ms"], "max_network_rtt_ms"),
+        max_egress_cost_microusd=_integer(
+            payload["max_egress_cost_microusd"], "max_egress_cost_microusd"
+        ),
     )

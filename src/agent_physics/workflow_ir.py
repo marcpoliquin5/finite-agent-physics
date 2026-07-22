@@ -20,13 +20,28 @@ from typing import Any, Literal
 
 import yaml
 
-from .contracts import BackendProfile, Effect, EffectClass, RunEnvelope, TaskContract
+from .contracts import (
+    AdapterRequirements,
+    BackendProfile,
+    CancellationSemantics,
+    CheckpointSemantics,
+    Effect,
+    EffectClass,
+    InputPort,
+    MAX_RESOURCE_UNITS,
+    OutputPort,
+    RunEnvelope,
+    TaskContract,
+    UsageSemantics,
+)
 from .graph import ExecutionGraph, GraphValidationError
 from .serialization import canonical_json
 
 
-WORKFLOW_SCHEMA_VERSION = 1
-"""The only workflow IR schema version understood by this release."""
+WORKFLOW_SCHEMA_VERSION = 2
+"""The latest workflow IR version; version 1 remains accepted for compatibility."""
+
+SUPPORTED_WORKFLOW_SCHEMA_VERSIONS = frozenset({1, 2})
 
 UNSUPPORTED_SCHEMA_FEATURES = (
     "alternative branches",
@@ -115,22 +130,16 @@ def compile_workflow(
 
     if isinstance(source, Mapping):
         if source_format not in (None, "python"):
-            raise WorkflowIRValidationError(
-                f"{source_format} source must be text or UTF-8 bytes"
-            )
+            raise WorkflowIRValidationError(f"{source_format} source must be text or UTF-8 bytes")
         document: Any = source
     elif isinstance(source, (str, bytes)):
         if source_format == "python":
             raise WorkflowIRValidationError("python source must be a mapping")
         text = _decode_text(source)
-        selected_format = source_format or (
-            "json" if text.lstrip().startswith("{") else "yaml"
-        )
+        selected_format = source_format or ("json" if text.lstrip().startswith("{") else "yaml")
         document = _load_json(text) if selected_format == "json" else _load_yaml(text)
     else:
-        raise WorkflowIRValidationError(
-            "workflow source must be a mapping, text, or UTF-8 bytes"
-        )
+        raise WorkflowIRValidationError("workflow source must be a mapping, text, or UTF-8 bytes")
 
     return _compile_document(document)
 
@@ -203,15 +212,18 @@ def _compile_document(document: Any) -> CompiledWorkflow:
         required={"schema_version", "envelope", "tasks"},
     )
     schema_version = _integer(root["schema_version"], "$.schema_version")
-    if schema_version != WORKFLOW_SCHEMA_VERSION:
+    if schema_version not in SUPPORTED_WORKFLOW_SCHEMA_VERSIONS:
         raise WorkflowIRValidationError(
             f"$.schema_version: unsupported version {schema_version!r}; "
-            f"expected {WORKFLOW_SCHEMA_VERSION}"
+            f"expected one of {sorted(SUPPORTED_WORKFLOW_SCHEMA_VERSIONS)!r}"
         )
 
-    envelope = _compile_envelope(root["envelope"])
+    envelope = _compile_envelope(root["envelope"], schema_version=schema_version)
     task_values = _array(root["tasks"], "$.tasks")
-    tasks = tuple(_compile_task(value, index) for index, value in enumerate(task_values))
+    tasks = tuple(
+        _compile_task(value, index, schema_version=schema_version)
+        for index, value in enumerate(task_values)
+    )
     tasks = tuple(sorted(tasks, key=lambda task: task.task_id))
 
     try:
@@ -234,20 +246,36 @@ def _compile_document(document: Any) -> CompiledWorkflow:
     )
 
 
-def _compile_envelope(value: Any) -> RunEnvelope:
+def _compile_envelope(value: Any, *, schema_version: int) -> RunEnvelope:
     path = "$.envelope"
+    allowed = {
+        "deadline_ms",
+        "max_tokens",
+        "max_cost_microusd",
+        "max_context_bytes",
+        "max_parallelism",
+        "min_modeled_success_probability",
+        "provider_limits",
+    }
+    if schema_version >= 2:
+        allowed.update(
+            {
+                "max_cpu_time_ms",
+                "max_peak_memory_bytes",
+                "max_peak_vram_bytes",
+                "max_storage_read_bytes",
+                "max_storage_write_bytes",
+                "max_network_ingress_bytes",
+                "max_network_egress_bytes",
+                "available_bandwidth_bps",
+                "max_network_rtt_ms",
+                "max_egress_cost_microusd",
+            }
+        )
     obj = _object(
         value,
         path,
-        allowed={
-            "deadline_ms",
-            "max_tokens",
-            "max_cost_microusd",
-            "max_context_bytes",
-            "max_parallelism",
-            "min_modeled_success_probability",
-            "provider_limits",
-        },
+        allowed=allowed,
         required={
             "deadline_ms",
             "max_tokens",
@@ -273,37 +301,76 @@ def _compile_envelope(value: Any) -> RunEnvelope:
     return RunEnvelope(
         deadline_ms=_integer(obj["deadline_ms"], f"{path}.deadline_ms"),
         max_tokens=_integer(obj["max_tokens"], f"{path}.max_tokens"),
-        max_cost_microusd=_integer(
-            obj["max_cost_microusd"], f"{path}.max_cost_microusd"
-        ),
-        max_context_bytes=_integer(
-            obj["max_context_bytes"], f"{path}.max_context_bytes"
-        ),
+        max_cost_microusd=_integer(obj["max_cost_microusd"], f"{path}.max_cost_microusd"),
+        max_context_bytes=_integer(obj["max_context_bytes"], f"{path}.max_context_bytes"),
         max_parallelism=_integer(obj["max_parallelism"], f"{path}.max_parallelism"),
         min_modeled_success_probability=_finite_number(
             obj.get("min_modeled_success_probability", 0.0),
             f"{path}.min_modeled_success_probability",
         ),
         provider_limits=provider_limits,
+        max_cpu_time_ms=_integer(
+            obj.get("max_cpu_time_ms", MAX_RESOURCE_UNITS),
+            f"{path}.max_cpu_time_ms",
+        ),
+        max_peak_memory_bytes=_integer(
+            obj.get("max_peak_memory_bytes", MAX_RESOURCE_UNITS),
+            f"{path}.max_peak_memory_bytes",
+        ),
+        max_peak_vram_bytes=_integer(
+            obj.get("max_peak_vram_bytes", MAX_RESOURCE_UNITS),
+            f"{path}.max_peak_vram_bytes",
+        ),
+        max_storage_read_bytes=_integer(
+            obj.get("max_storage_read_bytes", MAX_RESOURCE_UNITS),
+            f"{path}.max_storage_read_bytes",
+        ),
+        max_storage_write_bytes=_integer(
+            obj.get("max_storage_write_bytes", MAX_RESOURCE_UNITS),
+            f"{path}.max_storage_write_bytes",
+        ),
+        max_network_ingress_bytes=_integer(
+            obj.get("max_network_ingress_bytes", MAX_RESOURCE_UNITS),
+            f"{path}.max_network_ingress_bytes",
+        ),
+        max_network_egress_bytes=_integer(
+            obj.get("max_network_egress_bytes", MAX_RESOURCE_UNITS),
+            f"{path}.max_network_egress_bytes",
+        ),
+        available_bandwidth_bps=_integer(
+            obj.get("available_bandwidth_bps", MAX_RESOURCE_UNITS),
+            f"{path}.available_bandwidth_bps",
+        ),
+        max_network_rtt_ms=_integer(
+            obj.get("max_network_rtt_ms", MAX_RESOURCE_UNITS),
+            f"{path}.max_network_rtt_ms",
+        ),
+        max_egress_cost_microusd=_integer(
+            obj.get("max_egress_cost_microusd", MAX_RESOURCE_UNITS),
+            f"{path}.max_egress_cost_microusd",
+        ),
     )
 
 
-def _compile_task(value: Any, index: int) -> TaskContract:
+def _compile_task(value: Any, index: int, *, schema_version: int) -> TaskContract:
     path = f"$.tasks[{index}]"
+    allowed = {
+        "task_id",
+        "profiles",
+        "dependencies",
+        "effect",
+        "optional",
+        "value",
+        "min_quality",
+        "deadline_ms",
+        "description",
+    }
+    if schema_version >= 2:
+        allowed.update({"input_ports", "output_ports", "adapter_requirements"})
     obj = _object(
         value,
         path,
-        allowed={
-            "task_id",
-            "profiles",
-            "dependencies",
-            "effect",
-            "optional",
-            "value",
-            "min_quality",
-            "deadline_ms",
-            "description",
-        },
+        allowed=allowed,
         required={"task_id", "profiles"},
     )
     dependencies_values = _array(obj.get("dependencies", []), f"{path}.dependencies")
@@ -316,16 +383,38 @@ def _compile_task(value: Any, index: int) -> TaskContract:
 
     profile_values = _array(obj["profiles"], f"{path}.profiles")
     profiles = tuple(
-        _compile_profile(profile, f"{path}.profiles[{profile_index}]")
+        _compile_profile(
+            profile,
+            f"{path}.profiles[{profile_index}]",
+            schema_version=schema_version,
+        )
         for profile_index, profile in enumerate(profile_values)
     )
     profiles = tuple(sorted(profiles, key=lambda profile: (profile.name, profile.provider)))
 
     deadline_value = obj.get("deadline_ms")
-    deadline = (
-        None
-        if deadline_value is None
-        else _integer(deadline_value, f"{path}.deadline_ms")
+    deadline = None if deadline_value is None else _integer(deadline_value, f"{path}.deadline_ms")
+    input_ports = tuple(
+        sorted(
+            (
+                _compile_input_port(item, f"{path}.input_ports[{port_index}]")
+                for port_index, item in enumerate(
+                    _array(obj.get("input_ports", []), f"{path}.input_ports")
+                )
+            ),
+            key=lambda port: port.name,
+        )
+    )
+    output_ports = tuple(
+        sorted(
+            (
+                _compile_output_port(item, f"{path}.output_ports[{port_index}]")
+                for port_index, item in enumerate(
+                    _array(obj.get("output_ports", []), f"{path}.output_ports")
+                )
+            ),
+            key=lambda port: port.name,
+        )
     )
     return TaskContract(
         task_id=_string(obj["task_id"], f"{path}.task_id"),
@@ -334,30 +423,131 @@ def _compile_task(value: Any, index: int) -> TaskContract:
         effect=_compile_effect(obj.get("effect", {}), f"{path}.effect"),
         optional=_boolean(obj.get("optional", False), f"{path}.optional"),
         value=_finite_number(obj.get("value", 1.0), f"{path}.value"),
-        min_quality=_finite_number(
-            obj.get("min_quality", 0.0), f"{path}.min_quality"
-        ),
+        min_quality=_finite_number(obj.get("min_quality", 0.0), f"{path}.min_quality"),
         deadline_ms=deadline,
         description=_string(obj.get("description", ""), f"{path}.description"),
+        input_ports=input_ports,
+        output_ports=output_ports,
+        adapter_requirements=(
+            _compile_adapter_requirements(
+                obj["adapter_requirements"], f"{path}.adapter_requirements"
+            )
+            if "adapter_requirements" in obj
+            else None
+        ),
     )
 
 
-def _compile_profile(value: Any, path: str) -> BackendProfile:
+def _enum_value(value: Any, path: str, enum_type: type[Any]) -> Any:
+    text = _string(value, path)
+    try:
+        return enum_type(text)
+    except ValueError as exc:
+        choices = ", ".join(repr(item.value) for item in enum_type)
+        raise WorkflowIRValidationError(f"{path}: expected one of {choices}; got {text!r}") from exc
+
+
+def _compile_adapter_requirements(value: Any, path: str) -> AdapterRequirements:
+    fields = {
+        "cancellation",
+        "checkpoint",
+        "streaming",
+        "usage",
+        "effect_fencing",
+        "max_hidden_retries",
+    }
+    obj = _object(value, path, allowed=fields, required=fields)
+    return AdapterRequirements(
+        cancellation=_enum_value(
+            obj["cancellation"], f"{path}.cancellation", CancellationSemantics
+        ),
+        checkpoint=_enum_value(obj["checkpoint"], f"{path}.checkpoint", CheckpointSemantics),
+        streaming=_boolean(obj["streaming"], f"{path}.streaming"),
+        usage=_enum_value(obj["usage"], f"{path}.usage", UsageSemantics),
+        effect_fencing=_boolean(obj["effect_fencing"], f"{path}.effect_fencing"),
+        max_hidden_retries=_integer(obj["max_hidden_retries"], f"{path}.max_hidden_retries"),
+    )
+
+
+def _compile_output_port(value: Any, path: str) -> OutputPort:
+    obj = _object(
+        value,
+        path,
+        allowed={"name", "schema", "schema_version", "media_type"},
+        required={"name", "schema", "schema_version", "media_type"},
+    )
+    return OutputPort(
+        name=_string(obj["name"], f"{path}.name"),
+        schema=_string(obj["schema"], f"{path}.schema"),
+        schema_version=_string(obj["schema_version"], f"{path}.schema_version"),
+        media_type=_string(obj["media_type"], f"{path}.media_type"),
+    )
+
+
+def _compile_input_port(value: Any, path: str) -> InputPort:
     obj = _object(
         value,
         path,
         allowed={
             "name",
-            "provider",
-            "duration_ms_p50",
-            "duration_ms_p95",
-            "input_tokens",
-            "output_tokens",
-            "cost_microusd",
-            "context_bytes",
-            "quality",
-            "failure_probability",
+            "source_task_id",
+            "source_port",
+            "schema",
+            "schema_version",
+            "media_type",
         },
+        required={
+            "name",
+            "source_task_id",
+            "source_port",
+            "schema",
+            "schema_version",
+            "media_type",
+        },
+    )
+    return InputPort(
+        name=_string(obj["name"], f"{path}.name"),
+        source_task_id=_string(obj["source_task_id"], f"{path}.source_task_id"),
+        source_port=_string(obj["source_port"], f"{path}.source_port"),
+        schema=_string(obj["schema"], f"{path}.schema"),
+        schema_version=_string(obj["schema_version"], f"{path}.schema_version"),
+        media_type=_string(obj["media_type"], f"{path}.media_type"),
+    )
+
+
+def _compile_profile(value: Any, path: str, *, schema_version: int) -> BackendProfile:
+    allowed = {
+        "name",
+        "provider",
+        "duration_ms_p50",
+        "duration_ms_p95",
+        "input_tokens",
+        "output_tokens",
+        "cost_microusd",
+        "context_bytes",
+        "quality",
+        "failure_probability",
+    }
+    if schema_version >= 2:
+        allowed.update(
+            {
+                "profile_snapshot_digest",
+                "cpu_time_ms",
+                "peak_memory_bytes",
+                "peak_vram_bytes",
+                "storage_read_bytes",
+                "storage_write_bytes",
+                "network_ingress_bytes",
+                "network_egress_bytes",
+                "min_bandwidth_bps",
+                "network_rtt_ms",
+                "egress_cost_microusd",
+            }
+        )
+    obj = _object(
+        value,
+        path,
+        allowed=allowed,
         required={"name", "provider", "duration_ms_p50", "duration_ms_p95"},
     )
     return BackendProfile(
@@ -372,6 +562,27 @@ def _compile_profile(value: Any, path: str) -> BackendProfile:
         quality=_finite_number(obj.get("quality", 1.0), f"{path}.quality"),
         failure_probability=_finite_number(
             obj.get("failure_probability", 0.0), f"{path}.failure_probability"
+        ),
+        profile_snapshot_digest=_optional_string(
+            obj.get("profile_snapshot_digest"), f"{path}.profile_snapshot_digest"
+        ),
+        cpu_time_ms=_integer(obj.get("cpu_time_ms", 0), f"{path}.cpu_time_ms"),
+        peak_memory_bytes=_integer(obj.get("peak_memory_bytes", 0), f"{path}.peak_memory_bytes"),
+        peak_vram_bytes=_integer(obj.get("peak_vram_bytes", 0), f"{path}.peak_vram_bytes"),
+        storage_read_bytes=_integer(obj.get("storage_read_bytes", 0), f"{path}.storage_read_bytes"),
+        storage_write_bytes=_integer(
+            obj.get("storage_write_bytes", 0), f"{path}.storage_write_bytes"
+        ),
+        network_ingress_bytes=_integer(
+            obj.get("network_ingress_bytes", 0), f"{path}.network_ingress_bytes"
+        ),
+        network_egress_bytes=_integer(
+            obj.get("network_egress_bytes", 0), f"{path}.network_egress_bytes"
+        ),
+        min_bandwidth_bps=_integer(obj.get("min_bandwidth_bps", 0), f"{path}.min_bandwidth_bps"),
+        network_rtt_ms=_integer(obj.get("network_rtt_ms", 0), f"{path}.network_rtt_ms"),
+        egress_cost_microusd=_integer(
+            obj.get("egress_cost_microusd", 0), f"{path}.egress_cost_microusd"
         ),
     )
 
@@ -403,12 +614,8 @@ def _compile_effect(value: Any, path: str) -> Effect:
         requires_approval=_boolean(
             obj.get("requires_approval", False), f"{path}.requires_approval"
         ),
-        idempotency_key=_optional_string(
-            obj.get("idempotency_key"), f"{path}.idempotency_key"
-        ),
-        compensation=_optional_string(
-            obj.get("compensation"), f"{path}.compensation"
-        ),
+        idempotency_key=_optional_string(obj.get("idempotency_key"), f"{path}.idempotency_key"),
+        compensation=_optional_string(obj.get("compensation"), f"{path}.compensation"),
     )
 
 
@@ -500,6 +707,22 @@ def _normalized_document(
             "max_parallelism": envelope.max_parallelism,
             "min_modeled_success_probability": envelope.min_modeled_success_probability,
             "provider_limits": dict(envelope.provider_limits),
+            **(
+                {
+                    "max_cpu_time_ms": envelope.max_cpu_time_ms,
+                    "max_peak_memory_bytes": envelope.max_peak_memory_bytes,
+                    "max_peak_vram_bytes": envelope.max_peak_vram_bytes,
+                    "max_storage_read_bytes": envelope.max_storage_read_bytes,
+                    "max_storage_write_bytes": envelope.max_storage_write_bytes,
+                    "max_network_ingress_bytes": envelope.max_network_ingress_bytes,
+                    "max_network_egress_bytes": envelope.max_network_egress_bytes,
+                    "available_bandwidth_bps": envelope.available_bandwidth_bps,
+                    "max_network_rtt_ms": envelope.max_network_rtt_ms,
+                    "max_egress_cost_microusd": envelope.max_egress_cost_microusd,
+                }
+                if schema_version >= 2
+                else {}
+            ),
         },
         "tasks": [
             {
@@ -516,6 +739,27 @@ def _normalized_document(
                         "context_bytes": profile.context_bytes,
                         "quality": profile.quality,
                         "failure_probability": profile.failure_probability,
+                        **(
+                            {"profile_snapshot_digest": profile.profile_snapshot_digest}
+                            if schema_version >= 2
+                            else {}
+                        ),
+                        **(
+                            {
+                                "cpu_time_ms": profile.cpu_time_ms,
+                                "peak_memory_bytes": profile.peak_memory_bytes,
+                                "peak_vram_bytes": profile.peak_vram_bytes,
+                                "storage_read_bytes": profile.storage_read_bytes,
+                                "storage_write_bytes": profile.storage_write_bytes,
+                                "network_ingress_bytes": profile.network_ingress_bytes,
+                                "network_egress_bytes": profile.network_egress_bytes,
+                                "min_bandwidth_bps": profile.min_bandwidth_bps,
+                                "network_rtt_ms": profile.network_rtt_ms,
+                                "egress_cost_microusd": profile.egress_cost_microusd,
+                            }
+                            if schema_version >= 2
+                            else {}
+                        ),
                     }
                     for profile in task.profiles
                 ],
@@ -532,7 +776,64 @@ def _normalized_document(
                 "min_quality": task.min_quality,
                 "deadline_ms": task.deadline_ms,
                 "description": task.description,
+                **(
+                    {
+                        "input_ports": [
+                            {
+                                "name": port.name,
+                                "source_task_id": port.source_task_id,
+                                "source_port": port.source_port,
+                                "schema": port.schema,
+                                "schema_version": port.schema_version,
+                                "media_type": port.media_type,
+                            }
+                            for port in task.input_ports
+                        ],
+                        "output_ports": [
+                            {
+                                "name": port.name,
+                                "schema": port.schema,
+                                "schema_version": port.schema_version,
+                                "media_type": port.media_type,
+                            }
+                            for port in task.output_ports
+                        ],
+                        **(
+                            {
+                                "adapter_requirements": {
+                                    "cancellation": task.adapter_requirements.cancellation.value,
+                                    "checkpoint": task.adapter_requirements.checkpoint.value,
+                                    "streaming": task.adapter_requirements.streaming,
+                                    "usage": task.adapter_requirements.usage.value,
+                                    "effect_fencing": task.adapter_requirements.effect_fencing,
+                                    "max_hidden_retries": (
+                                        task.adapter_requirements.max_hidden_retries
+                                    ),
+                                }
+                            }
+                            if task.adapter_requirements is not None
+                            else {}
+                        ),
+                    }
+                    if schema_version >= 2
+                    else {}
+                ),
             }
             for task in graph.tasks
         ],
     }
+
+
+def compile_contracts(
+    graph: ExecutionGraph,
+    envelope: RunEnvelope,
+    *,
+    schema_version: int = WORKFLOW_SCHEMA_VERSION,
+) -> CompiledWorkflow:
+    """Compile in-memory contracts through the same strict interchange boundary."""
+
+    if type(schema_version) is not int or schema_version not in SUPPORTED_WORKFLOW_SCHEMA_VERSIONS:
+        raise WorkflowIRValidationError(
+            f"$.schema_version: expected one of {sorted(SUPPORTED_WORKFLOW_SCHEMA_VERSIONS)}"
+        )
+    return compile_python(_normalized_document(schema_version, graph, envelope))

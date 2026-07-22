@@ -1,11 +1,23 @@
-# Agent Physics: 60-capability competition program
+# Agent Physics v5 release-candidate roadmap
 
 This is a coherent systems program, not a promise that every item will be production-complete
 by July 31. `P0` items form the judged vertical slice; `P1` items deepen the evidence and
 experience; `P2` items demonstrate a credible post-hackathon trajectory.
 
+The acceptance source of truth is [`PROGRAM.md`](PROGRAM.md): 62 capabilities plus eight
+integrated proofs. The active candidate label is `v5.0.0-rc.1` / Python `5.0.0rc1`; stable v5.0.0
+remains blocked. The numbered themes below are a product roadmap, not an alternate completion
+count.
+
 The dated [competitive landscape and 45-gap register](docs/competitive-landscape.md) determines
 release order: eligibility and judge proof come before additional framework breadth.
+
+Current local evidence includes 22 MCP tools, typed ports and adapter ABI admission, declared
+physical-resource admission, adaptive recovery, durable artifact lineage, bounded semantic safety,
+independent verifiers, neutral/LangGraph loss accounting, and local REST/SSE. It does **not**
+include a genuine Bob session, a captured live-watsonx receipt, an executed PageAgent integration,
+public GitHub/tag evidence, a public API, or an anonymous judge deployment. The current Sites URL
+is saved/deployed as version 5 from Sites source commit `47ba39a`, but remains owner-only.
 
 ## A. Constraint language and compiler
 

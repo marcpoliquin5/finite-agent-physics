@@ -1,10 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import artifactEnvelopeJson from "./demo-artifact.json";
 
 type ScenarioId = "nominal" | "provider" | "workers";
 type DigestState = "checking" | "verified" | "mismatch";
+type RuntimeConnectionState = "idle" | "launching" | "streaming" | "settled" | "error";
+
+type LiveRunStatus = {
+  run_id: string;
+  state: string;
+  event_count: number;
+  last_event_id: string;
+  pending_effect_count?: number;
+};
+
+type LiveEvent = {
+  id: string;
+  sequence: number;
+  event_id: string;
+  type: string;
+  task_id: string | null;
+  occurred_at_ms: number;
+};
 
 type RunEntry = {
   id: string;
@@ -47,6 +65,7 @@ type Decision = {
 
 type ArtifactPayload = {
   schema_version: string;
+  release_generation: string;
   measurement_kind: string;
   claim_status: string;
   fictional_fixture: boolean;
@@ -124,6 +143,57 @@ type ArtifactPayload = {
     bundle_ids: string[];
     scope: string;
   };
+  physical_resource_admission: {
+    declared_physical_cap_count: number;
+    coverage_dimension_count: number;
+    summary_digest: string;
+    report: {
+      status: string;
+      checks: { passed: boolean }[];
+      transport_rtt_critical_path_lower_bound_ms: number;
+    };
+    energy_boundary: { status: string; unit: string };
+  };
+  adaptive_crash_restart_recovery: {
+    final_status: string;
+    controller_record_count: number;
+    replay_passed: boolean;
+    worker_calls_during_replay: number;
+    external_provider_calls: number;
+    summary_digest: string;
+  };
+  bounded_semantic_safety: {
+    bounded_check_count: number;
+    adversarial_mutation_count: number;
+    adversarial_refused_count: number;
+    baseline_passed: boolean;
+    summary_digest: string;
+  };
+  artifact_store_restart_integrity: {
+    artifact_count: number;
+    verification_passed: boolean;
+    deduplication_preserved: boolean;
+    summary_digest: string;
+  };
+  framework_conformance_loss_accounting: {
+    neutral: { semantic_loss_count: number; round_trip_exact: boolean };
+    langgraph: { semantic_loss_count: number; manifest_digest_verified: boolean };
+    optional_framework_execution: string;
+    summary_digest: string;
+  };
+  release_and_whole_run_verifier_boundaries: {
+    release_ready_claim: boolean;
+    release_manifest: { capability_id_count: number; release_gate_id_count: number };
+    whole_run_verifier: { independent_of_scheduler_executor_provider_and_planner: boolean };
+    summary_digest: string;
+  };
+  v5_evidence_boundaries: {
+    live_bob_session_present: boolean;
+    live_watsonx_or_granite_calls: number;
+    public_deployment_receipt_present: boolean;
+    release_ready_claim: boolean;
+    summary_digest: string;
+  };
 };
 
 type ArtifactEnvelope = {
@@ -143,6 +213,28 @@ const formatSeconds = (milliseconds: number) => `${(milliseconds / 1000).toFixed
 const formatUsd = (microUsd: number) => `$${(microUsd / 1_000_000).toFixed(5)}`;
 const shortDigest = (digest: string) => `sha256: ${digest.slice(0, 7)}...${digest.slice(-7)}`;
 
+function normalizedApiBase(raw: string): string {
+  const parsed = new URL(raw.trim());
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && loopback)) {
+    throw new Error("Use HTTPS, or HTTP only for a loopback FINITE service.");
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error("The service URL cannot contain credentials, query text, or a fragment.");
+  }
+  parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+  return parsed.toString().replace(/\/$/, "");
+}
+
+async function responseJson(response: Response): Promise<Record<string, unknown>> {
+  const payload = (await response.json()) as Record<string, unknown>;
+  if (!response.ok) {
+    const error = payload.error as { message?: unknown } | undefined;
+    throw new Error(typeof error?.message === "string" ? error.message : `HTTP ${response.status}`);
+  }
+  return payload;
+}
+
 async function verifyArtifactDigest(): Promise<boolean> {
   const bytes = new TextEncoder().encode(artifactEnvelope.canonical_payload);
   const hash = await crypto.subtle.digest("SHA-256", bytes);
@@ -157,6 +249,15 @@ export default function Home() {
   const [deadline, setDeadline] = useState(12_000);
   const [costCap, setCostCap] = useState(16_000);
   const [digestState, setDigestState] = useState<DigestState>("checking");
+  const [apiBase, setApiBase] = useState("http://127.0.0.1:8080");
+  const [apiToken, setApiToken] = useState("");
+  const [runtimeState, setRuntimeState] = useState<RuntimeConnectionState>("idle");
+  const [runtimeMessage, setRuntimeMessage] = useState(
+    "Connect to an entrant-run FINITE service to execute the bundled reference workflow.",
+  );
+  const [liveStatus, setLiveStatus] = useState<LiveRunStatus | null>(null);
+  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
+  const runtimeAbort = useRef<AbortController | null>(null);
   const witness = artifact.witnesses[scenario];
   const decision = artifact.decisions[scenario][`${deadline}:${costCap}`];
 
@@ -173,6 +274,135 @@ export default function Home() {
       active = false;
     };
   }, []);
+
+  useEffect(
+    () => () => {
+      runtimeAbort.current?.abort();
+    },
+    [],
+  );
+
+  const runtimeHeaders = (json = false): HeadersInit => {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (json) headers["Content-Type"] = "application/json";
+    if (apiToken) headers.Authorization = `Bearer ${apiToken}`;
+    return headers;
+  };
+
+  const refreshLiveStatus = async (base: string, runId: string): Promise<LiveRunStatus> => {
+    const response = await fetch(`${base}/v1/runs/${encodeURIComponent(runId)}/status`, {
+      headers: runtimeHeaders(),
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+    });
+    return (await responseJson(response)) as LiveRunStatus;
+  };
+
+  const streamRunEvents = async (base: string, runId: string, signal: AbortSignal) => {
+    const response = await fetch(
+      `${base}/v1/runs/${encodeURIComponent(runId)}/events?after=0`,
+      {
+        headers: { ...runtimeHeaders(), Accept: "text/event-stream" },
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        signal,
+      },
+    );
+    if (!response.ok || !response.body) {
+      await responseJson(response);
+      throw new Error("The event stream was unavailable.");
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+      for (const frame of frames) {
+        const data = frame
+          .split("\n")
+          .find((line) => line.startsWith("data: "))
+          ?.slice(6);
+        if (!data) continue;
+        const event = JSON.parse(data) as LiveEvent;
+        setLiveEvents((current) => [...current, event].slice(-12));
+      }
+      if (done) break;
+    }
+  };
+
+  const launchReferenceRun = async () => {
+    runtimeAbort.current?.abort();
+    const abort = new AbortController();
+    runtimeAbort.current = abort;
+    setRuntimeState("launching");
+    setRuntimeMessage("Loading the digest-bound StormShift workflow from the control plane...");
+    setLiveEvents([]);
+    setLiveStatus(null);
+    try {
+      const base = normalizedApiBase(apiBase);
+      const referenceResponse = await fetch(`${base}/v1/reference-workflows/stormshift`, {
+        headers: runtimeHeaders(),
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        signal: abort.signal,
+      });
+      const reference = await responseJson(referenceResponse);
+      if (typeof reference.workflow !== "object" || reference.workflow === null) {
+        throw new Error("The control plane returned an invalid reference workflow.");
+      }
+      const runId = `console-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const submitResponse = await fetch(`${base}/v1/runs`, {
+        method: "POST",
+        headers: runtimeHeaders(true),
+        body: JSON.stringify({ run_id: runId, workflow: reference.workflow }),
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        signal: abort.signal,
+      });
+      await responseJson(submitResponse);
+      setRuntimeState("streaming");
+      setRuntimeMessage("Runtime accepted the envelope. Streaming its durable event ledger.");
+      setLiveStatus(await refreshLiveStatus(base, runId));
+      await streamRunEvents(base, runId, abort.signal);
+      const settled = await refreshLiveStatus(base, runId);
+      setLiveStatus(settled);
+      setRuntimeState("settled");
+      setRuntimeMessage(
+        settled.state === "awaiting_effects"
+          ? "Execution stopped at the approval boundary. No external effect was committed."
+          : `The durable run settled as ${settled.state}.`,
+      );
+    } catch (error) {
+      if (abort.signal.aborted) return;
+      setRuntimeState("error");
+      setRuntimeMessage(error instanceof Error ? error.message : "Runtime connection failed.");
+    }
+  };
+
+  const cancelLiveRun = async () => {
+    if (!liveStatus) return;
+    try {
+      const base = normalizedApiBase(apiBase);
+      const response = await fetch(
+        `${base}/v1/runs/${encodeURIComponent(liveStatus.run_id)}/cancel`,
+        {
+          method: "POST",
+          headers: runtimeHeaders(true),
+          body: JSON.stringify({ reason: "Physics Console operator request" }),
+          credentials: "omit",
+          referrerPolicy: "no-referrer",
+        },
+      );
+      await responseJson(response);
+      setRuntimeMessage("A durable cooperative-cancellation request was recorded.");
+    } catch (error) {
+      setRuntimeState("error");
+      setRuntimeMessage(error instanceof Error ? error.message : "Cancellation failed.");
+    }
+  };
 
   const state = useMemo(() => {
     if (!decision) {
@@ -416,6 +646,94 @@ export default function Home() {
         </aside>
       </section>
 
+      <section className="live-rack" aria-labelledby="live-runtime-title">
+        <header>
+          <div>
+            <span className="panel-kicker">OPTIONAL LIVE CONTROL PLANE / REST + SSE</span>
+            <h2 id="live-runtime-title">Run the reference workflow. Watch every transition.</h2>
+          </div>
+          <span className={`runtime-chip runtime-${runtimeState}`}>
+            {runtimeState.toUpperCase()}
+          </span>
+        </header>
+        <div className="live-layout">
+          <form
+            className="runtime-connect"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void launchReferenceRun();
+            }}
+          >
+            <label>
+              <span>FINITE service origin</span>
+              <input
+                type="url"
+                inputMode="url"
+                value={apiBase}
+                onChange={(event) => setApiBase(event.target.value)}
+                spellCheck={false}
+                required
+              />
+            </label>
+            <label>
+              <span>Bearer token <small>optional on loopback</small></span>
+              <input
+                type="password"
+                value={apiToken}
+                onChange={(event) => setApiToken(event.target.value)}
+                autoComplete="off"
+                placeholder="Kept only in this page memory"
+              />
+            </label>
+            <div className="runtime-actions">
+              <button
+                className="launch-button"
+                type="submit"
+                disabled={runtimeState === "launching" || runtimeState === "streaming"}
+              >
+                {runtimeState === "launching" ? "Negotiating..." : "Launch bounded run"}
+              </button>
+              <button
+                className="cancel-button"
+                type="button"
+                disabled={!liveStatus || runtimeState !== "streaming"}
+                onClick={() => void cancelLiveRun()}
+              >
+                Request cancel
+              </button>
+            </div>
+            <p>{runtimeMessage}</p>
+            <small>
+              Browser access requires an exact CORS origin allowlist. The token is never added
+              to the URL or the sealed demo artifact.
+            </small>
+          </form>
+          <div className="runtime-ledger" aria-live="polite">
+            <div className="runtime-summary">
+              <div><span>Run ID</span><strong>{liveStatus?.run_id ?? "not launched"}</strong></div>
+              <div><span>Durable state</span><strong>{liveStatus?.state ?? "--"}</strong></div>
+              <div><span>Events</span><strong>{liveEvents.length || liveStatus?.event_count || 0}</strong></div>
+              <div><span>External commits</span><strong>0 by API contract</strong></div>
+            </div>
+            <ol className="live-events">
+              {liveEvents.length === 0 ? (
+                <li className="live-empty">
+                  <span>--</span><b>WAITING</b><p>No runtime event has crossed this browser boundary.</p>
+                </li>
+              ) : (
+                liveEvents.map((event) => (
+                  <li key={`${event.sequence}-${event.event_id}`}>
+                    <span>{String(event.sequence).padStart(2, "0")}</span>
+                    <b>{event.type}</b>
+                    <p>{event.task_id ?? "run"}</p>
+                  </li>
+                ))
+              )}
+            </ol>
+          </div>
+        </div>
+      </section>
+
       <section className="lower-grid">
         <article className="panel decision-panel">
           <header className="panel-header">
@@ -499,11 +817,81 @@ export default function Home() {
         </p>
       </section>
 
+      <section className="v5-rack" aria-labelledby="v5-title">
+        <header>
+          <div>
+            <span className="panel-kicker">V5 INVARIANT STACK / EXECUTABLE LOCAL EVIDENCE</span>
+            <h2 id="v5-title">More than orchestration: admission, recovery, meaning, lineage.</h2>
+          </div>
+          <span className="trace-digest">
+            {shortDigest(artifact.v5_evidence_boundaries.summary_digest)}
+          </span>
+        </header>
+        <div className="v5-grid">
+          <article>
+            <span>PHYSICAL ADMISSION</span>
+            <strong>{artifact.physical_resource_admission.declared_physical_cap_count} CAPS</strong>
+            <p>
+              CPU, RAM, VRAM, storage, network, bandwidth, RTT, and egress cost admitted
+              before dispatch. Energy stays explicitly {artifact.physical_resource_admission.energy_boundary.status}.
+            </p>
+            <small>{shortDigest(artifact.physical_resource_admission.summary_digest)}</small>
+          </article>
+          <article>
+            <span>ACTIVE RECOVERY</span>
+            <strong>{artifact.adaptive_crash_restart_recovery.final_status.toUpperCase()}</strong>
+            <p>
+              {artifact.adaptive_crash_restart_recovery.controller_record_count} durable controller
+              records survive a crash; replay makes {artifact.adaptive_crash_restart_recovery.worker_calls_during_replay}
+              {" "}worker calls.
+            </p>
+            <small>{shortDigest(artifact.adaptive_crash_restart_recovery.summary_digest)}</small>
+          </article>
+          <article>
+            <span>BOUNDED SEMANTIC SAFETY</span>
+            <strong>{artifact.bounded_semantic_safety.adversarial_refused_count}/{artifact.bounded_semantic_safety.adversarial_mutation_count}</strong>
+            <p>
+              Adversarial citation, number, bilingual, freshness, URL, authority, taint, and
+              declared-accessibility mutations are refused.
+            </p>
+            <small>{shortDigest(artifact.bounded_semantic_safety.summary_digest)}</small>
+          </article>
+          <article>
+            <span>ARTIFACT LINEAGE</span>
+            <strong>{artifact.artifact_store_restart_integrity.verification_passed ? "RESTART VERIFIED" : "INVALID"}</strong>
+            <p>
+              Content identity, parents, transformation provenance, restart reads, and exact
+              deduplication are checked together.
+            </p>
+            <small>{shortDigest(artifact.artifact_store_restart_integrity.summary_digest)}</small>
+          </article>
+          <article>
+            <span>FRAMEWORK CONFORMANCE</span>
+            <strong>{artifact.framework_conformance_loss_accounting.langgraph.semantic_loss_count} LOSSES NAMED</strong>
+            <p>
+              Neutral round-trip is exact. LangGraph conversion records every narrowed or
+              metadata-only semantic instead of claiming equivalence.
+            </p>
+            <small>{shortDigest(artifact.framework_conformance_loss_accounting.summary_digest)}</small>
+          </article>
+          <article className="v5-boundary-card">
+            <span>RELEASE GATE</span>
+            <strong>{artifact.release_and_whole_run_verifier_boundaries.release_ready_claim ? "READY" : "EVIDENCE REQUIRED"}</strong>
+            <p>
+              {artifact.release_and_whole_run_verifier_boundaries.release_manifest.capability_id_count}
+              {" "}capability checks and {artifact.release_and_whole_run_verifier_boundaries.release_manifest.release_gate_id_count}
+              {" "}integrated gates refuse to mint live Bob, Granite, GitHub, or deployment proof.
+            </p>
+            <small>{shortDigest(artifact.release_and_whole_run_verifier_boundaries.summary_digest)}</small>
+          </article>
+        </div>
+      </section>
+
       <section className="evidence-rack" aria-labelledby="evidence-title">
         <header>
           <div>
             <span className="panel-kicker">REGISTERED EVIDENCE / DESCRIPTIVE ONLY</span>
-            <h2 id="evidence-title">Four physics layers. One sealed artifact.</h2>
+            <h2 id="evidence-title">Eighteen signals. One sealed artifact.</h2>
           </div>
           <span className="trace-digest">
             {shortDigest(artifact.registered_fault_experiment.experiment_config_digest)}
@@ -521,13 +909,20 @@ export default function Home() {
           <article><strong>{artifact.registered_fault_experiment.policy_count}</strong><span>simulator policies</span></article>
           <article><strong>{artifact.bob_mcp_tool_count}</strong><span>Bob-facing local tools</span></article>
           <article><strong>{artifact.provider_quota_stress.reset_suppressed_retries}</strong><span>reset-window retry suppressions</span></article>
+          <article><strong>{artifact.physical_resource_admission.coverage_dimension_count}</strong><span>physical-resource coverage dimensions</span></article>
+          <article><strong>{artifact.adaptive_crash_restart_recovery.controller_record_count}</strong><span>durable adaptive controller records</span></article>
+          <article><strong>{artifact.bounded_semantic_safety.adversarial_mutation_count}</strong><span>semantic adversarial mutations refused</span></article>
+          <article><strong>{artifact.artifact_store_restart_integrity.artifact_count}</strong><span>restart-verified lineage artifacts</span></article>
+          <article><strong>{artifact.framework_conformance_loss_accounting.langgraph.semantic_loss_count}</strong><span>LangGraph semantic losses made explicit</span></article>
+          <article><strong>{artifact.release_and_whole_run_verifier_boundaries.release_manifest.capability_id_count}</strong><span>release-manifest capability IDs</span></article>
           <article><strong>0</strong><span>live or external calls represented</span></article>
         </div>
         <p>
           The quota guard and replanner are declared local models; explanation records contain
           public post-hoc facts, never chain-of-thought. Adaptive is the paired-analysis baseline;
           static-parallel and sequential are development references, not tuned external-framework
-          baselines. Revision provenance is
+          baselines. V5 local evidence is not a substitute for entrant-owned Bob, Granite,
+          GitHub, deployment, or submission receipts. Revision provenance is
           {" "}<b>{artifact.registered_fault_experiment.revision_provenance}</b>.
         </p>
       </section>
@@ -538,7 +933,7 @@ export default function Home() {
           <span>Digest-bound fixture</span>
           <span>Rendered output checked</span>
           <span>Apache-2.0</span>
-          <span>Alpha evidence build</span>
+          <span>V5 local evidence candidate</span>
         </div>
       </footer>
     </main>

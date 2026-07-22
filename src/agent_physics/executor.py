@@ -21,12 +21,20 @@ import json
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
 from typing import TypeVar, cast
 
-from .contracts import BackendProfile, RunEnvelope, TaskContract
+from .adapter_capabilities import AdapterCapabilityError, validate_adapter_bindings
+from .contracts import AdapterCapabilities, BackendProfile, RunEnvelope, TaskContract
 from .effects import EffectState, SQLiteEffectBroker
 from .graph import ExecutionGraph, GraphValidationError
+from .physical_resources import (
+    PhysicalAdmissionReport,
+    PhysicalAdmissionStatus,
+    analyze_physical_resources,
+)
+from .profile_snapshot import ProfileSnapshot, ProfileSnapshotError, validate_profile_snapshot
 from .run_store import RunDefinition, RunEvent, SQLiteRunStore, Usage, UsageRecord
 from .scheduler import SchedulePolicy, Scheduler
 
@@ -97,12 +105,26 @@ class RetryPolicy:
 
     max_attempts: int = 1
     backoff_ms: int = 0
+    jitter_ms: int = 0
+    jitter_seed: int = 0
+    circuit_failure_threshold: int = 0
+    circuit_cooldown_ms: int = 0
 
     def __post_init__(self) -> None:
-        if self.max_attempts <= 0:
+        if type(self.max_attempts) is not int or self.max_attempts <= 0:
             raise ValueError("max_attempts must be positive")
-        if self.backoff_ms < 0:
+        if type(self.backoff_ms) is not int or self.backoff_ms < 0:
             raise ValueError("backoff_ms cannot be negative")
+        if type(self.jitter_ms) is not int or self.jitter_ms < 0:
+            raise ValueError("jitter_ms cannot be negative")
+        if type(self.jitter_seed) is not int or self.jitter_seed < 0:
+            raise ValueError("jitter_seed cannot be negative")
+        if type(self.circuit_failure_threshold) is not int or self.circuit_failure_threshold < 0:
+            raise ValueError("circuit_failure_threshold cannot be negative")
+        if type(self.circuit_cooldown_ms) is not int or self.circuit_cooldown_ms < 0:
+            raise ValueError("circuit_cooldown_ms cannot be negative")
+        if bool(self.circuit_failure_threshold) != bool(self.circuit_cooldown_ms):
+            raise ValueError("circuit threshold and cooldown must be enabled together")
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,9 +179,7 @@ class CancellationSignal:
         self._internal.set()
 
     def is_set(self) -> bool:
-        return self._internal.is_set() or (
-            self._external is not None and self._external.is_set()
-        )
+        return self._internal.is_set() or (self._external is not None and self._external.is_set())
 
     async def wait(self) -> None:
         if self.is_set():
@@ -181,7 +201,7 @@ FixtureWorker = Callable[[TaskExecutionContext], Awaitable[WorkerResult]]
 OutputValidator = Callable[[TaskContract, object], Awaitable[bool]]
 T = TypeVar("T")
 _CANCELLATION_GRACE_SECONDS = 0.05
-EXECUTION_MANIFEST_REVISION = 1
+EXECUTION_MANIFEST_REVISION = 3
 
 
 def _canonical_json(value: object) -> str:
@@ -227,6 +247,23 @@ def _callable_identity(function: object) -> str:
     return f"{module}:{qualname}"
 
 
+def _redacted_error_payload(
+    error: BaseException,
+    *,
+    retryable: bool,
+    **facts: object,
+) -> dict[str, object]:
+    """Persist error class and digest without retaining provider/worker message text."""
+
+    return {
+        "error_type": type(error).__name__,
+        "error_message_digest": hashlib.sha256(str(error).encode("utf-8")).hexdigest(),
+        "message_redacted": True,
+        "retryable": retryable,
+        **facts,
+    }
+
+
 def _graph_digest(graph: ExecutionGraph) -> str:
     tasks: list[dict[str, object]] = []
     for task in sorted(graph.tasks, key=lambda item: item.task_id):
@@ -242,6 +279,17 @@ def _graph_digest(graph: ExecutionGraph) -> str:
                 "context_bytes": profile.context_bytes,
                 "quality": profile.quality,
                 "failure_probability": profile.failure_probability,
+                "profile_snapshot_digest": profile.profile_snapshot_digest,
+                "cpu_time_ms": profile.cpu_time_ms,
+                "peak_memory_bytes": profile.peak_memory_bytes,
+                "peak_vram_bytes": profile.peak_vram_bytes,
+                "storage_read_bytes": profile.storage_read_bytes,
+                "storage_write_bytes": profile.storage_write_bytes,
+                "network_ingress_bytes": profile.network_ingress_bytes,
+                "network_egress_bytes": profile.network_egress_bytes,
+                "min_bandwidth_bps": profile.min_bandwidth_bps,
+                "network_rtt_ms": profile.network_rtt_ms,
+                "egress_cost_microusd": profile.egress_cost_microusd,
             }
             for profile in sorted(task.profiles, key=lambda item: (item.provider, item.name))
         ]
@@ -261,6 +309,38 @@ def _graph_digest(graph: ExecutionGraph) -> str:
                 "min_quality": task.min_quality,
                 "deadline_ms": task.deadline_ms,
                 "description": task.description,
+                "input_ports": [
+                    {
+                        "name": port.name,
+                        "source_task_id": port.source_task_id,
+                        "source_port": port.source_port,
+                        "schema": port.schema,
+                        "schema_version": port.schema_version,
+                        "media_type": port.media_type,
+                    }
+                    for port in sorted(task.input_ports, key=lambda item: item.name)
+                ],
+                "output_ports": [
+                    {
+                        "name": port.name,
+                        "schema": port.schema,
+                        "schema_version": port.schema_version,
+                        "media_type": port.media_type,
+                    }
+                    for port in sorted(task.output_ports, key=lambda item: item.name)
+                ],
+                "adapter_requirements": (
+                    {
+                        "cancellation": task.adapter_requirements.cancellation.value,
+                        "checkpoint": task.adapter_requirements.checkpoint.value,
+                        "streaming": task.adapter_requirements.streaming,
+                        "usage": task.adapter_requirements.usage.value,
+                        "effect_fencing": task.adapter_requirements.effect_fencing,
+                        "max_hidden_retries": task.adapter_requirements.max_hidden_retries,
+                    }
+                    if task.adapter_requirements is not None
+                    else None
+                ),
                 "profiles": profiles,
             }
         )
@@ -277,6 +357,16 @@ def _envelope_dict(envelope: RunEnvelope) -> dict[str, object]:
         "max_parallelism": envelope.max_parallelism,
         "min_modeled_success_probability": envelope.min_modeled_success_probability,
         "provider_limits": [list(item) for item in sorted(envelope.provider_limits)],
+        "max_cpu_time_ms": envelope.max_cpu_time_ms,
+        "max_peak_memory_bytes": envelope.max_peak_memory_bytes,
+        "max_peak_vram_bytes": envelope.max_peak_vram_bytes,
+        "max_storage_read_bytes": envelope.max_storage_read_bytes,
+        "max_storage_write_bytes": envelope.max_storage_write_bytes,
+        "max_network_ingress_bytes": envelope.max_network_ingress_bytes,
+        "max_network_egress_bytes": envelope.max_network_egress_bytes,
+        "available_bandwidth_bps": envelope.available_bandwidth_bps,
+        "max_network_rtt_ms": envelope.max_network_rtt_ms,
+        "max_egress_cost_microusd": envelope.max_egress_cost_microusd,
     }
 
 
@@ -297,15 +387,70 @@ class AsyncGraphExecutor:
         retry_policy: RetryPolicy = RetryPolicy(),
         effect_broker: SQLiteEffectBroker | None = None,
         validator_revision: str = "1",
+        profile_snapshots: Mapping[str, ProfileSnapshot] | None = None,
+        require_profile_snapshots: bool = False,
     ) -> None:
         if not validator_revision:
             raise ValueError("validator_revision is required")
+        if type(require_profile_snapshots) is not bool:
+            raise ValueError("require_profile_snapshots must be a boolean")
         self.store = store
         self._workers = dict(workers)
         self._output_validator = output_validator or _default_output_validator
         self._retry_policy = retry_policy
         self._effect_broker = effect_broker
         self._validator_revision = validator_revision
+        self._profile_snapshots = dict(profile_snapshots or {})
+        self._require_profile_snapshots = require_profile_snapshots
+
+    def _validate_profile_snapshots(
+        self,
+        profiles: Mapping[str, BackendProfile],
+    ) -> dict[str, ProfileSnapshot]:
+        accepted: dict[str, ProfileSnapshot] = {}
+        reference = datetime.fromtimestamp(self.store.now_ms / 1_000, tz=UTC)
+        for task_id in sorted(profiles):
+            profile = profiles[task_id]
+            snapshot = self._profile_snapshots.get(task_id)
+            required = (
+                self._require_profile_snapshots or profile.profile_snapshot_digest is not None
+            )
+            if snapshot is None:
+                if required:
+                    raise AdmissionRefused(
+                        f"task {task_id!r} selected profile has no immutable profile snapshot"
+                    )
+                continue
+            try:
+                verified = validate_profile_snapshot(snapshot.canonical_json, at=reference)
+            except ProfileSnapshotError as exc:
+                raise AdmissionRefused(
+                    f"task {task_id!r} profile snapshot is invalid or stale: {exc}"
+                ) from exc
+            if verified != snapshot:
+                raise AdmissionRefused(
+                    f"task {task_id!r} profile snapshot differs from canonical evidence"
+                )
+            if snapshot.task_id != task_id or snapshot.profile_id != profile.name:
+                raise AdmissionRefused(
+                    f"task {task_id!r} profile snapshot identity does not match selected profile"
+                )
+            if snapshot.provider_name != profile.provider:
+                raise AdmissionRefused(
+                    f"task {task_id!r} profile snapshot provider does not match selected provider"
+                )
+            if (
+                profile.profile_snapshot_digest is not None
+                and profile.profile_snapshot_digest != snapshot.digest
+            ):
+                raise AdmissionRefused(
+                    f"task {task_id!r} profile snapshot digest does not match graph contract"
+                )
+            accepted[task_id] = snapshot
+        extra = sorted(set(self._profile_snapshots) - set(profiles))
+        if extra:
+            raise AdmissionRefused(f"profile snapshots include unselected tasks: {extra}")
+        return accepted
 
     def _adaptive_admission(
         self,
@@ -355,6 +500,9 @@ class AsyncGraphExecutor:
         profiles: Mapping[str, BackendProfile],
         skipped: tuple[str, ...],
         retry_reservation: Usage,
+        adapter_capabilities: Mapping[str, AdapterCapabilities],
+        profile_snapshots: Mapping[str, ProfileSnapshot],
+        physical_admission: PhysicalAdmissionReport,
     ) -> tuple[str, dict[str, object]]:
         by_id = graph.by_id
         selected = []
@@ -372,6 +520,23 @@ class AsyncGraphExecutor:
                     "context_bytes": profile.context_bytes,
                     "quality": profile.quality,
                     "failure_probability": profile.failure_probability,
+                    "physical_estimates": {
+                        "cpu_time_ms": profile.cpu_time_ms,
+                        "peak_memory_bytes": profile.peak_memory_bytes,
+                        "peak_vram_bytes": profile.peak_vram_bytes,
+                        "storage_read_bytes": profile.storage_read_bytes,
+                        "storage_write_bytes": profile.storage_write_bytes,
+                        "network_ingress_bytes": profile.network_ingress_bytes,
+                        "network_egress_bytes": profile.network_egress_bytes,
+                        "min_bandwidth_bps": profile.min_bandwidth_bps,
+                        "network_rtt_ms": profile.network_rtt_ms,
+                        "egress_cost_microusd": profile.egress_cost_microusd,
+                    },
+                    "profile_snapshot_digest": (
+                        profile_snapshots[task_id].digest
+                        if task_id in profile_snapshots
+                        else profile.profile_snapshot_digest
+                    ),
                 }
             )
         effects = [
@@ -392,6 +557,10 @@ class AsyncGraphExecutor:
             "retry_policy": {
                 "max_attempts": self._retry_policy.max_attempts,
                 "backoff_ms": self._retry_policy.backoff_ms,
+                "jitter_ms": self._retry_policy.jitter_ms,
+                "jitter_seed": self._retry_policy.jitter_seed,
+                "circuit_failure_threshold": (self._retry_policy.circuit_failure_threshold),
+                "circuit_cooldown_ms": self._retry_policy.circuit_cooldown_ms,
             },
             "retry_reservation": {
                 "tokens": retry_reservation.tokens,
@@ -399,6 +568,44 @@ class AsyncGraphExecutor:
                 "context_bytes": retry_reservation.context_bytes,
             },
             "worker_task_ids": sorted(self._workers),
+            "adapter_bindings": [
+                {
+                    "task_id": task_id,
+                    "requirements": {
+                        "cancellation": by_id[task_id].adapter_requirements.cancellation.value,
+                        "checkpoint": by_id[task_id].adapter_requirements.checkpoint.value,
+                        "streaming": by_id[task_id].adapter_requirements.streaming,
+                        "usage": by_id[task_id].adapter_requirements.usage.value,
+                        "effect_fencing": by_id[task_id].adapter_requirements.effect_fencing,
+                        "max_hidden_retries": by_id[
+                            task_id
+                        ].adapter_requirements.max_hidden_retries,
+                    },
+                    "capabilities": adapter_capabilities[task_id].as_dict(),
+                }
+                for task_id in sorted(adapter_capabilities)
+                if by_id[task_id].adapter_requirements is not None
+            ],
+            "profile_snapshots": [
+                {
+                    "task_id": task_id,
+                    "profile_id": snapshot.profile_id,
+                    "provider": snapshot.provider_name,
+                    "provider_version": snapshot.provider_version,
+                    "model": snapshot.model_name,
+                    "model_version": snapshot.model_version,
+                    "tool": snapshot.tool_name,
+                    "tool_version": snapshot.tool_version,
+                    "adapter": snapshot.adapter_name,
+                    "adapter_version": snapshot.adapter_version,
+                    "metrics_provenance": snapshot.metrics_provenance,
+                    "snapshot_at": snapshot.snapshot_at.isoformat(),
+                    "valid_until": snapshot.valid_until.isoformat(),
+                    "snapshot_digest": snapshot.digest,
+                }
+                for task_id, snapshot in sorted(profile_snapshots.items())
+            ],
+            "physical_admission": physical_admission.as_dict(),
             "validator": {
                 "identity": _callable_identity(self._output_validator),
                 "revision": self._validator_revision,
@@ -429,6 +636,32 @@ class AsyncGraphExecutor:
             future.exception()
         except BaseException:
             pass
+
+    def _retry_delay_ms(self, task_id: str, attempt: int) -> int:
+        jitter = self._retry_policy.jitter_ms
+        if jitter == 0:
+            return self._retry_policy.backoff_ms
+        material = f"finite-retry-jitter/v1:{self._retry_policy.jitter_seed}:{task_id}:{attempt}"
+        offset = int(hashlib.sha256(material.encode("utf-8")).hexdigest()[:16], 16) % (jitter + 1)
+        return self._retry_policy.backoff_ms + offset
+
+    def _append_dead_letter(self, run_id: str, task_id: str, error: Exception) -> None:
+        attempts = sum(
+            event.event_type == "task.attempt_started" and event.task_id == task_id
+            for event in self.store.events(run_id)
+        )
+        self.store.append_event(
+            run_id=run_id,
+            event_id=f"{run_id}:{task_id}:dead_lettered",
+            event_type="task.dead_lettered",
+            task_id=task_id,
+            payload={
+                "error_type": type(error).__name__,
+                "error_message_digest": hashlib.sha256(str(error).encode("utf-8")).hexdigest(),
+                "attempt_count": attempts,
+                "payload_redacted": True,
+            },
+        )
 
     async def _cancel_future_bounded(self, future: asyncio.Future[object]) -> bool:
         """Request cancellation without letting a hostile fixture block the executor."""
@@ -565,12 +798,7 @@ class AsyncGraphExecutor:
             task_id=task_id,
             attempt=attempt,
             outcome="failed",
-            payload={
-                "error_type": type(error).__name__,
-                "message": str(error),
-                "retryable": False,
-                "phase": phase,
-            },
+            payload=_redacted_error_payload(error, retryable=False, phase=phase),
             estimated=estimated,
             reserved=reserved,
             actual=actual,
@@ -605,9 +833,7 @@ class AsyncGraphExecutor:
         actual = result.actual_usage if isinstance(result, WorkerResult) else Usage()
         error: OutputValidationError | TaskExecutionFailed | None = None
         if not isinstance(result, WorkerResult):
-            error = TaskExecutionFailed(
-                f"task {task.task_id!r} worker must return WorkerResult"
-            )
+            error = TaskExecutionFailed(f"task {task.task_id!r} worker must return WorkerResult")
         else:
             self._reject_usage_overrun(
                 run_id=run.run_id,
@@ -631,12 +857,11 @@ class AsyncGraphExecutor:
                     task_id=task.task_id,
                     attempt=attempt,
                     outcome=outcome,
-                    payload={
-                        "error_type": type(exc).__name__,
-                        "message": str(exc),
-                        "retryable": False,
-                        "phase": "output_validation",
-                    },
+                    payload=_redacted_error_payload(
+                        exc,
+                        retryable=False,
+                        phase="output_validation",
+                    ),
                     estimated=estimated,
                     reserved=reserved,
                     actual=actual,
@@ -665,11 +890,7 @@ class AsyncGraphExecutor:
                 task_id=task.task_id,
                 attempt=attempt,
                 outcome="failed",
-                payload={
-                    "error_type": type(error).__name__,
-                    "message": str(error),
-                    "retryable": False,
-                },
+                payload=_redacted_error_payload(error, retryable=False),
                 estimated=estimated,
                 reserved=reserved,
                 actual=actual,
@@ -684,7 +905,11 @@ class AsyncGraphExecutor:
                 task_id=task.task_id,
                 attempt=attempt,
                 outcome="cancelled",
-                payload={"message": str(error), "phase": "completion"},
+                payload=_redacted_error_payload(
+                    error,
+                    retryable=False,
+                    phase="completion",
+                ),
                 estimated=estimated,
                 reserved=reserved,
                 actual=result.actual_usage,
@@ -697,12 +922,11 @@ class AsyncGraphExecutor:
                 task_id=task.task_id,
                 attempt=attempt,
                 outcome="failed",
-                payload={
-                    "error_type": type(error).__name__,
-                    "message": str(error),
-                    "retryable": False,
-                    "phase": "completion",
-                },
+                payload=_redacted_error_payload(
+                    error,
+                    retryable=False,
+                    phase="completion",
+                ),
                 estimated=estimated,
                 reserved=reserved,
                 actual=result.actual_usage,
@@ -746,6 +970,12 @@ class AsyncGraphExecutor:
             raise TaskExecutionFailed(
                 f"task {task.task_id!r} exhausted {self._retry_policy.max_attempts} calls"
             )
+        prior_retryable_failures = sum(
+            event.event_type == "task.attempt_failed"
+            and event.task_id == task.task_id
+            and event.payload.get("retryable") is True
+            for event in self.store.events(run.run_id)
+        )
 
         for call_index in range(calls_remaining):
             if cancellation_event.is_set():
@@ -798,11 +1028,7 @@ class AsyncGraphExecutor:
                         task_id=task.task_id,
                         attempt=attempt,
                         outcome="failed",
-                        payload={
-                            "error_type": type(exc).__name__,
-                            "message": str(exc),
-                            "retryable": True,
-                        },
+                        payload=_redacted_error_payload(exc, retryable=True),
                         estimated=estimated,
                         reserved=reserved,
                         actual=exc.actual_usage,
@@ -811,6 +1037,27 @@ class AsyncGraphExecutor:
                         raise TaskExecutionFailed(
                             f"task {task.task_id!r} exhausted bounded retries"
                         ) from exc
+                    failure_count = prior_retryable_failures + call_index + 1
+                    threshold = self._retry_policy.circuit_failure_threshold
+                    if threshold and failure_count >= threshold:
+                        opened_until_ms = self.store.now_ms + self._retry_policy.circuit_cooldown_ms
+                        self.store.append_event(
+                            run_id=run.run_id,
+                            event_id=(f"{run.run_id}:{task.task_id}:circuit_opened:{attempt}"),
+                            event_type="task.circuit_opened",
+                            task_id=task.task_id,
+                            attempt=attempt,
+                            payload={
+                                "provider": profile.provider,
+                                "backend": profile.name,
+                                "retryable_failure_count": failure_count,
+                                "opened_until_ms": opened_until_ms,
+                                "cooldown_ms": self._retry_policy.circuit_cooldown_ms,
+                            },
+                        )
+                        raise TaskExecutionFailed(
+                            f"task {task.task_id!r} circuit opened after bounded failures"
+                        ) from exc
                     retry_requested = True
                 except DeadlineExceeded as exc:
                     self._append_attempt_outcome(
@@ -818,11 +1065,7 @@ class AsyncGraphExecutor:
                         task_id=task.task_id,
                         attempt=attempt,
                         outcome="failed",
-                        payload={
-                            "error_type": type(exc).__name__,
-                            "message": str(exc),
-                            "retryable": False,
-                        },
+                        payload=_redacted_error_payload(exc, retryable=False),
                         estimated=estimated,
                         reserved=reserved,
                         actual=Usage(),
@@ -834,7 +1077,7 @@ class AsyncGraphExecutor:
                         task_id=task.task_id,
                         attempt=attempt,
                         outcome="cancelled",
-                        payload={"message": str(exc)},
+                        payload=_redacted_error_payload(exc, retryable=False),
                         estimated=estimated,
                         reserved=reserved,
                         actual=Usage(),
@@ -858,11 +1101,7 @@ class AsyncGraphExecutor:
                         task_id=task.task_id,
                         attempt=attempt,
                         outcome="failed",
-                        payload={
-                            "error_type": type(exc).__name__,
-                            "message": str(exc),
-                            "retryable": False,
-                        },
+                        payload=_redacted_error_payload(exc, retryable=False),
                         estimated=estimated,
                         reserved=reserved,
                         actual=Usage(),
@@ -882,17 +1121,32 @@ class AsyncGraphExecutor:
                         deadline_at_ms=deadline_at_ms,
                     )
 
-            if self._retry_policy.backoff_ms:
-                backoff_end = self.store.now_ms + self._retry_policy.backoff_ms
+            if retry_requested:
+                retry_delay_ms = self._retry_delay_ms(task.task_id, attempt)
+                self.store.append_event(
+                    run_id=run.run_id,
+                    event_id=f"{run.run_id}:{task.task_id}:retry_scheduled:{attempt}",
+                    event_type="task.retry_scheduled",
+                    task_id=task.task_id,
+                    attempt=attempt,
+                    payload={
+                        "base_backoff_ms": self._retry_policy.backoff_ms,
+                        "jitter_bound_ms": self._retry_policy.jitter_ms,
+                        "jitter_seed": self._retry_policy.jitter_seed,
+                        "delay_ms": retry_delay_ms,
+                    },
+                )
+                backoff_end = self.store.now_ms + retry_delay_ms
                 if backoff_end >= deadline_at_ms:
                     raise DeadlineExceeded(
                         f"task {task.task_id!r} deadline does not admit retry backoff"
                     )
-                await self._await_controlled(
-                    asyncio.sleep(self._retry_policy.backoff_ms / 1_000),
-                    cancellation_event=cancellation_event,
-                    deadline_at_ms=deadline_at_ms,
-                )
+                if retry_delay_ms:
+                    await self._await_controlled(
+                        asyncio.sleep(retry_delay_ms / 1_000),
+                        cancellation_event=cancellation_event,
+                        deadline_at_ms=deadline_at_ms,
+                    )
         raise TaskExecutionFailed(f"task {task.task_id!r} produced no result")
 
     def _materialize_effect_intent(
@@ -989,9 +1243,7 @@ class AsyncGraphExecutor:
             if not future.done():
                 future.cancel()
         if running:
-            done, pending = await asyncio.wait(
-                set(running), timeout=_CANCELLATION_GRACE_SECONDS
-            )
+            done, pending = await asyncio.wait(set(running), timeout=_CANCELLATION_GRACE_SECONDS)
             for future in done:
                 self._consume_future(future)
             for future in pending:
@@ -1097,9 +1349,14 @@ class AsyncGraphExecutor:
         if not run_id:
             raise ValueError("run_id is required")
 
-        profiles, skipped_task_ids, retry_reservation = self._adaptive_admission(
-            graph, envelope
-        )
+        profiles, skipped_task_ids, retry_reservation = self._adaptive_admission(graph, envelope)
+        physical_admission = analyze_physical_resources(graph, envelope, profiles)
+        if physical_admission.status is PhysicalAdmissionStatus.REFUSED:
+            violations = ", ".join(
+                f"{check.dimension}={check.observed}/{check.limit} {check.unit}"
+                for check in physical_admission.violations
+            )
+            raise AdmissionRefused(f"physical-resource admission refused run: {violations}")
         by_id = graph.by_id
         missing_workers = sorted(
             task_id
@@ -1107,19 +1364,33 @@ class AsyncGraphExecutor:
             if not by_id[task_id].effect.kind.writes and task_id not in self._workers
         )
         if missing_workers:
-            raise AdmissionRefused(
-                f"selected fixture tasks have no worker: {missing_workers}"
+            raise AdmissionRefused(f"selected fixture tasks have no worker: {missing_workers}")
+        try:
+            adapter_capabilities = validate_adapter_bindings(
+                by_id,
+                profiles,
+                self._workers,
             )
+        except AdapterCapabilityError as exc:
+            raise AdmissionRefused(str(exc)) from exc
+        profile_snapshots = self._validate_profile_snapshots(profiles)
         manifest_digest, manifest = self._execution_manifest(
             graph,
             profiles,
             skipped_task_ids,
             retry_reservation,
+            adapter_capabilities,
+            profile_snapshots,
+            physical_admission,
         )
         persisted_envelope = _envelope_dict(envelope)
         persisted_envelope["retry_policy"] = {
             "max_attempts": self._retry_policy.max_attempts,
             "backoff_ms": self._retry_policy.backoff_ms,
+            "jitter_ms": self._retry_policy.jitter_ms,
+            "jitter_seed": self._retry_policy.jitter_seed,
+            "circuit_failure_threshold": self._retry_policy.circuit_failure_threshold,
+            "circuit_cooldown_ms": self._retry_policy.circuit_cooldown_ms,
         }
         run = self.store.get_or_create_run(
             run_id=run_id,
@@ -1141,6 +1412,7 @@ class AsyncGraphExecutor:
                 "selected_task_ids": sorted(profiles),
                 "skipped_task_ids": list(skipped_task_ids),
                 "retry_reservation": manifest["retry_reservation"],
+                "physical_admission_digest": physical_admission.report_digest,
             },
         )
         existing_events = self.store.events(run_id)
@@ -1161,16 +1433,13 @@ class AsyncGraphExecutor:
         if set(durable_records) & set(skipped_task_ids):
             raise DurableOutputInvalid("durable outputs include tasks skipped by admission")
         resumed_task_ids = tuple(sorted(durable_records))
-        outputs = {
-            task_id: completion.output for task_id, completion in durable_records.items()
-        }
+        outputs = {task_id: completion.output for task_id, completion in durable_records.items()}
         await self._revalidate_durable_outputs(
             run=run,
             graph=graph,
             durable=outputs,
             completion_events={
-                task_id: completion.event
-                for task_id, completion in durable_records.items()
+                task_id: completion.event for task_id, completion in durable_records.items()
             },
             profiles=profiles,
             cancellation_event=cancel_signal,
@@ -1218,12 +1487,14 @@ class AsyncGraphExecutor:
                 if not running:
                     raise TaskExecutionFailed("executor deadlock: no dependency-ready tasks")
 
-                done, _ = await asyncio.wait(
-                    tuple(running), return_when=asyncio.FIRST_COMPLETED
-                )
+                done, _ = await asyncio.wait(tuple(running), return_when=asyncio.FIRST_COMPLETED)
                 for future in sorted(done, key=lambda item: running[item]):
                     task_id = running.pop(future)
-                    output = future.result()
+                    try:
+                        output = future.result()
+                    except Exception as exc:
+                        self._append_dead_letter(run_id, task_id, exc)
+                        raise
                     outputs[task_id] = output
                     pending.remove(task_id)
         except SimulatedExecutorCrash:
@@ -1253,7 +1524,11 @@ class AsyncGraphExecutor:
                 run_id=run_id,
                 event_id=f"{run_id}:run_failed",
                 event_type="run.failed",
-                payload={"error_type": type(exc).__name__, "reason": str(exc)},
+                payload={
+                    "error_type": type(exc).__name__,
+                    "reason_digest": hashlib.sha256(str(exc).encode("utf-8")).hexdigest(),
+                    "reason_redacted": True,
+                },
             )
             raise
         except BaseException:

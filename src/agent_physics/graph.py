@@ -44,8 +44,37 @@ class ExecutionGraph:
             errors.extend(task.validate())
             for dependency in task.dependencies:
                 if dependency not in known:
+                    errors.append(f"task {task.task_id!r}: unknown dependency {dependency!r}")
+            for input_port in task.input_ports:
+                if input_port.source_task_id not in known:
                     errors.append(
-                        f"task {task.task_id!r}: unknown dependency {dependency!r}"
+                        f"task {task.task_id!r}: input port {input_port.name!r} has missing "
+                        f"producer {input_port.source_task_id!r}"
+                    )
+                    continue
+                if input_port.source_task_id not in task.dependencies:
+                    errors.append(
+                        f"task {task.task_id!r}: input port {input_port.name!r} producer "
+                        f"{input_port.source_task_id!r} must be a direct dependency"
+                    )
+                    continue
+                producer = self.by_id[input_port.source_task_id]
+                candidates = {output.name: output for output in producer.output_ports}
+                output = candidates.get(input_port.source_port)
+                if output is None:
+                    errors.append(
+                        f"task {task.task_id!r}: input port {input_port.name!r} references "
+                        f"missing producer port {input_port.source_task_id!r}."
+                        f"{input_port.source_port!r}"
+                    )
+                    continue
+                expected = (input_port.schema, input_port.schema_version, input_port.media_type)
+                produced = (output.schema, output.schema_version, output.media_type)
+                if expected != produced:
+                    errors.append(
+                        f"task {task.task_id!r}: input port {input_port.name!r} is incompatible "
+                        f"with {input_port.source_task_id!r}.{input_port.source_port!r}; "
+                        f"expected {expected!r}, produced {produced!r}"
                     )
         if not errors:
             self._validate_acyclic()

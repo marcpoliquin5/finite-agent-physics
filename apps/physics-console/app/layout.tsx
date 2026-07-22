@@ -26,7 +26,7 @@ function requestOrigin(requestHeaders: Headers): URL {
 
 export async function generateMetadata(): Promise<Metadata> {
   const origin = requestOrigin(await headers());
-  const socialCard = new URL("/og.png", origin).toString();
+  const socialCard = new URL("/og-v5.png", origin).toString();
 
   return {
     metadataBase: origin,
@@ -37,7 +37,14 @@ export async function generateMetadata(): Promise<Metadata> {
       type: "website",
       title,
       description,
-      images: [{ url: socialCard, width: 1728, height: 927, alt: "FINITE constraint-native scheduling witness" }],
+      images: [
+        {
+          url: socialCard,
+          width: 1536,
+          height: 1024,
+          alt: "FINITE Agent Physics v5 constraint-native control plane",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",

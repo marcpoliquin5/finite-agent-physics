@@ -1,123 +1,124 @@
 # IBM Bob session runbook
 
-This is a launch plan, not evidence. Only actions actually performed in IBM Bob may be copied
-into `bob-build-log.md`. The objective is to give Bob material ownership of planning,
-implementation, testing, and iteration before submission—not to manufacture a branding trail.
+This is a launch plan, not evidence. Only actions actually performed in IBM Bob may be copied into
+`bob-build-log.md`. The objective is material Bob ownership of planning, implementation, testing,
+and release review - not a branding trail.
 
 ## Before the first session
 
-1. Install the repository in the Python environment Bob will launch: `pip install -e ".[dev]"`.
+1. Install the repository in the Python environment Bob launches:
+   `python -m pip install -e ".[dev,mcp,api]"`.
 2. Open this repository as the Bob workspace and review `.bob/mcp.json` plus Bob's MCP panel.
-3. Confirm the `finite-agent-physics` server starts with no auto-approved tools.
-4. Start a screen recording or capture timestamped screenshots that show Bob, the prompt, tool
-   calls, changed files, and verification output.
-5. Use a fresh `bob/` Git branch or clearly identify Bob's commits; do not rewrite Codex commits
-   as Bob work.
+3. Confirm `finite-agent-physics` starts and exposes 22 tools with none globally auto-approved.
+4. Record the starting branch and exact commit.
+5. Capture timestamped screen recording or screenshots showing Bob, prompts, tool calls, changed
+   files, and verification output; keep account/personal evidence private until redacted.
+6. Use a fresh `bob/` branch or clearly separated Bob commits. Never relabel Codex commits as Bob.
 
-## B1 — Constraint invariant audit and accepted correction
+## B1 - Adversarial invariant audit
 
 Give Bob this task:
 
-> Read `PROGRAM.md`, `docs/limitations.md`, `src/agent_physics/scheduler.py`,
-> `src/agent_physics/executor.py`, and the associated tests. Use the project
-> `constraint-review` skill. Find at least one concrete counterexample where a documented hard
-> promise, restart invariant, or explanation can be violated or mislabeled. Reproduce it with a
-> failing test, implement the narrowest correct fix, and run focused plus full verification. Do
-> not weaken a contract or rename modeled evidence as measured evidence.
+> Read `docs/V5_RELEASE_CONTRACT.md`, `docs/limitations.md`, and the compiler, executor, adaptive
+> runtime, physical admission, artifact, verifier, and effect code with their tests. Find one
+> concrete counterexample where a hard promise, identity, restart invariant, settlement rule, or
+> evidence label can be violated. Reproduce it with a failing test, implement the narrowest correct
+> fix, and run focused plus full verification. Do not weaken a contract or rename estimated,
+> fixture, simulated, or private evidence as measured/live/public.
 
 Acceptance:
 
-- Bob identifies the issue from code rather than being handed a predetermined patch.
-- A failing regression test precedes the accepted correction.
-- Human review records rejected or modified Bob suggestions.
-- The accepted Bob commit is separate and references exact tests.
+- Bob finds the issue from code rather than being handed a predetermined patch.
+- A failing regression test demonstrates the issue before the accepted fix.
+- Human review records any rejected or modified Bob suggestion.
+- The accepted Bob commit names the invariant and exact tests.
 
-## B2 — Bob calls FINITE as an orchestration client
+## B2 - Bob calls FINITE as an orchestration client
 
-Ask Bob to use MCP, not a pasted terminal result:
+Ask Bob to use MCP, not pasted terminal output:
 
-> Call `finite_capabilities`. Then call `finite_preflight` with the default envelope and with
-> `max_tokens=1`. Call `finite_executor_drill`, `finite_stormshift_validate` once nominally and
-> once with `stale-artifact`, `finite_quota_corpus`, `finite_replanning_drill`,
-> `finite_decision_explanation_drill` in refused mode, `finite_fault_experiment` with revision
-> `bob-evidence-v1`, and `finite_verify`. Compare the returned measurement labels, run/effect
-> boundaries, raw record count, and digests. Explain which result is a conservative refusal and
-> which claims remain unsupported. Do not call or imply any external effect or hidden reasoning.
-
-Acceptance:
-
-- Screenshot/video shows genuine Bob tool-call UI and tool names.
-- Returned quota, replan, explanation, trace, and experiment digests are retained in the log.
-- Bob correctly states `awaiting_effects`, `PROPOSED`, structural-only, deterministic-simulation,
-  and no-external-call boundaries.
-- No MCP tool is globally auto-approved merely to make the recording easier.
-
-## B3 — Live Granite/watsonx adapter integration
-
-Only run this package when the entrant has their own watsonx credentials and an available
-Granite model. Never paste credentials into Bob prompts, source files, screenshots, or logs.
-
-> Inspect `watsonx.py`, `stormshift_runtime.py`, executor reservations, and the adapter tests.
-> Design and implement the smallest capability-safe path that executes one bounded fictional
-> synthesis task through the real Granite model while keeping admission and retry ownership in
-> FINITE. Persist a redacted receipt with model ID, latency, provider-reported usage when
-> available, request/response digests, validator result, and an explicit `live-watsonx` label.
-> Add an offline fake path for CI. Refuse the live claim when required receipt fields or
-> credentials are missing.
+> Call `finite_capabilities`. Call `finite_preflight` with the default envelope and with
+> `max_tokens=1`; confirm the refusal makes zero external calls. Start the bundled fixture with
+> `finite_run`. Preserve its run ID, poll `finite_status`, call `finite_explain_run`, and finish with
+> `finite_verify_run` for the same ID. Then call the physical-admission, adaptive-recovery,
+> framework-conformance, and artifact-integrity drills. Explain every simulation, fixture, live,
+> estimated, unsupported, and not-executed label. Do not approve or commit an external effect.
 
 Acceptance:
 
-- Bob contributes material adapter/runtime code or a substantive correction to it.
-- Real credentials remain environment-only and never enter Git.
-- Test-double output is never labeled live.
-- One real redacted receipt is saved outside source control first, reviewed, then added only if
-  it contains no sensitive payload or identifier.
+- Genuine Bob UI shows tool names and returned run/digest values.
+- One run ID connects run, status, explanation, and verification.
+- Bob correctly identifies `awaiting_effects`, `PROPOSED`, energy unsupported, and PageAgent not
+  executed/non-equivalent.
+- No tool is globally auto-approved merely to simplify recording.
 
-## B4 — Console accessibility and evidence review
+## B3 - Live Granite/watsonx run
 
-> Audit the Physics Console as a keyboard and screen-reader user. Verify focus visibility,
-> heading order, fieldset/range labels, live decision announcements, reduced motion, mobile
-> layout, color contrast, and that every simulated/model/live distinction is readable without
-> color. Implement concrete fixes and extend the rendered-output tests. Do not change kernel
-> numbers or claims in the frontend.
+Run only with entrant-owned watsonx credentials and an available Granite model. Never paste a key
+into Bob prompts, source, screenshots, terminal history intended for publication, or logs.
 
-Acceptance:
-
-- Bob changes and tests at least one meaningful accessibility or evidence-boundary issue.
-- Kernel-generated artifact values remain authoritative.
-- The session includes before/after evidence and human review.
-
-## B5 — Fair baseline or explicit negative result
-
-> Use `BENCHMARK.md` as a preregistration. Implement one honest external-framework baseline over
-> identical task implementations, prompts, tools, model menu, validators, cache rules, and fault
-> seeds. Preserve raw traces and report negative or null results. Do not compare FINITE's
-> simulator to a deliberately untuned toy and do not publish a superiority statement from fewer
-> than the registered trials.
+> Review `watsonx.py`, `watsonx_worker.py`, `bob_lifecycle.py`, executor reservations, and their
+> tests. Call `finite_granite_preflight`. If it passes, start one bounded Granite-backed fictional
+> task through `finite_run`, then call status, explain, and verify for the same run. Check that SDK
+> retries are zero, provider tokens settle inside the admitted reservation, output validation gates
+> completion, the receipt is redacted and labeled `live-watsonx`, and resume does not recall the
+> model. Find and fix any real defect before accepting the evidence.
 
 Acceptance:
 
-- Framework versions and exact commit are pinned.
-- Identical-work checks fail closed.
-- Raw results and aggregation code are committed before narrative claims.
-- If time or credits prevent fairness, Bob records why the comparison was omitted.
+- Credentials remain environment-only and do not appear in Git or evidence.
+- The exact Granite model ID and provider usage are present in a reviewed redacted receipt.
+- Missing usage, model mismatch, validation failure, or late settlement fails closed.
+- Bob contributes material review/code/test work, not only the call itself.
 
-## B6 — Bob release audit
+## B4 - Console accessibility and recovery
 
-> Use the project `release-evidence` skill. Run `python scripts/verify_release.py`. Map every
-> README and project-page claim to the judge bundle, raw record digest, code, tests, exact commit,
-> and real Bob/live receipts. Mark unsupported, stale, private, or inaccessible material as a
-> blocker. Do not waive Bob, SkillsBuild, public repository, video, or eligibility requirements.
+> Run the API and Physics Console. Use keyboard-only navigation and a screen reader or accessibility
+> tree. Verify focus visibility/order, landmarks, labels, status announcements, contrast,
+> reduced-motion behavior, 200% zoom/reflow, exact-origin errors, invalid-token recovery, stream
+> reconnection, and the distinction between sealed replay and live data. Reproduce one concrete
+> issue, fix it, and extend the rendered or browser-level test. Do not move kernel logic into the
+> frontend.
 
 Acceptance:
 
-- Bob produces a blocking/non-blocking audit and fixes at least one confirmed release issue.
-- The final Bob session references the exact submitted commit and judge-bundle digest.
-- The entrant verifies public links in a signed-out browser after Bob's review.
+- Bob changes/tests a meaningful accessibility or error-recovery issue.
+- Runtime data remains authoritative; frontend code does not recalculate evidence claims.
+- Before/after evidence and human review are retained.
+
+## B5 - Fair-comparison red team
+
+> Audit the preregistered comparison contract and runners. Confirm FINITE, plain Python, and the
+> exact-pinned LangGraph witness use one workload/payload/validator fingerprint, identical warmup
+> and measured seeds, common refusal/effect guardrails, and failures in denominators. Verify Wilson
+> and paired-bootstrap summaries from raw records. Confirm PageAgent is hard-coded as not executed
+> and cannot acquire a metric. Add a regression for any defect and publish negative or baseline
+> wins. Do not create a superiority headline unless the registered threshold passes.
+
+Acceptance:
+
+- Exact versions, environment, seeds, and raw records are bound into evidence.
+- Conversion loss or unavailable dependencies fail visibly.
+- Bob records negative/null results as readily as FINITE wins.
+
+## B6 - Exact-commit release audit
+
+> Generate and verify the release candidate from a clean commit. Inspect wheel/sdist contents,
+> entry points, metadata, checksums, SBOM, provenance, secret scan, dependency audits, license,
+> console asset digest, benchmark raw data, and external-evidence placeholders. Perform a fresh
+> anonymous clone and the documented judge path. Map every README/project-page sentence to local,
+> live, public, or human evidence. Block stable `v5.0.0` for any stale, private, absent, or
+> unsupported required record.
+
+Acceptance:
+
+- Bob produces a blocking/non-blocking report and fixes at least one confirmed release issue.
+- The final Bob session references the exact candidate commit and evidence digest.
+- The entrant independently checks public links in a signed-out browser.
 
 ## Build-log discipline
 
-For every accepted session, copy the template in `bob-build-log.md` and fill it from actual
-artifacts. Link Bob screenshots/video locally until public release, list exact files and tests,
-and include the accepted commit. A session with no material accepted contribution can still be
-logged honestly, but it does not by itself satisfy the core-component requirement.
+For every accepted session, copy the template in `bob-build-log.md` and fill it only from actual
+artifacts. List exact files, tests, run ID, digests, human corrections, and accepted commit. A
+session with no material accepted contribution can still be logged honestly, but it does not by
+itself satisfy the core-development requirement.

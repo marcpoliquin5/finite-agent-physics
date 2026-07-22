@@ -24,6 +24,11 @@ from .executor import (
     WorkerResult,
 )
 from .run_store import SQLiteRunStore, Usage
+from .semantic_safety import (
+    SemanticSafetyReport,
+    StormShiftSemanticSafetyVerifier,
+    build_reference_semantic_bundle,
+)
 from .serialization import content_digest, normalize
 from .stormshift import (
     AccessibilityAttestation,
@@ -71,12 +76,13 @@ class StormShiftRuntimeResult:
     execution: ExecutionResult
     response_plan: ResponsePlan
     validation: PlanValidationReport
+    semantic_validation: SemanticSafetyReport
     alert_preview: dict[str, object]
     effect_intent: EffectIntent
     worker_call_counts: dict[str, int]
     external_calls_made: bool = False
     model_calls_made: bool = False
-    validator_kind: str = "deterministic_structural_only"
+    validator_kind: str = "deterministic_structural_plus_bounded_semantic"
 
 
 def stormshift_envelope() -> RunEnvelope:
@@ -174,9 +180,7 @@ def _response_plan_from_output(output: object) -> ResponsePlan:
                     ]
                 ),
                 plain_language=bool(
-                    _require_mapping(payload["accessibility"], "accessibility")[
-                        "plain_language"
-                    ]
+                    _require_mapping(payload["accessibility"], "accessibility")["plain_language"]
                 ),
                 nonvisual_route_equivalent=bool(
                     _require_mapping(payload["accessibility"], "accessibility")[
@@ -194,12 +198,9 @@ def _response_plan_from_output(output: object) -> ResponsePlan:
                 ),
             ),
             citations=tuple(
-                str(value)
-                for value in _require_sequence(payload["citations"], "citations")
+                str(value) for value in _require_sequence(payload["citations"], "citations")
             ),
-            publication_disposition=PublicationDisposition(
-                str(payload["publication_disposition"])
-            ),
+            publication_disposition=PublicationDisposition(str(payload["publication_disposition"])),
             external_publication_attempted=bool(payload["external_publication_attempted"]),
             external_targets=tuple(
                 str(value)
@@ -223,6 +224,7 @@ class StormShiftFixtureWorkers:
         self.scenario = scenario
         self._reference_plan = build_reference_plan(scenario)
         self._validator = StormShiftValidator()
+        self._semantic_verifier = StormShiftSemanticSafetyVerifier()
         self._calls = {task_id: 0 for task_id in PURE_TASK_IDS}
 
     @property
@@ -304,11 +306,7 @@ class StormShiftFixtureWorkers:
                         for item in sorted(scenario.floods, key=lambda item: item.flood_id)
                     ],
                     "closed_segments": sorted(
-                        {
-                            segment
-                            for flood in scenario.floods
-                            for segment in flood.closed_segments
-                        }
+                        {segment for flood in scenario.floods for segment in flood.closed_segments}
                     ),
                 }
             )
@@ -361,14 +359,45 @@ class StormShiftFixtureWorkers:
             )
         elif task_id == "safety_review":
             report = self._validator.validate(scenario, self._reference_plan)
+            count = scenario.evacuee_demand
+            english_fragment = f"{count} people"
+            spanish_fragment = f"{count} personas"
+            if (
+                english_fragment not in self._reference_plan.alert.english
+                or spanish_fragment not in self._reference_plan.alert.spanish
+            ):
+                raise StormShiftRuntimeInvariantError(
+                    "bilingual alert is not bound to the controlled evacuation fact"
+                )
+            semantic_bundle = build_reference_semantic_bundle(
+                scenario_id=scenario.scenario_id,
+                evacuee_count=count,
+                english_statement=english_fragment,
+                spanish_statement=spanish_fragment,
+            )
+            semantic_report = self._semantic_verifier.verify(semantic_bundle)
+            semantic_binding_digest = content_digest(
+                {
+                    "plan_digest": self._reference_plan.plan_digest,
+                    "bundle_digest": semantic_bundle.bundle_digest,
+                    "report_digest": semantic_report.report_digest,
+                }
+            )
             output.update(
                 {
                     "plan_digest": self._reference_plan.plan_digest,
                     "report": normalize(report),
                     "report_digest": report.report_digest,
-                    "passed": report.passed,
-                    "structural_only": True,
+                    "passed": report.passed and semantic_report.passed,
+                    "structural_report_only": True,
+                    "semantic_validation_kind": ("controlled-facts-and-static-declarations-only"),
                     "external_state_checked": False,
+                    "semantic_report": normalize(semantic_report),
+                    "semantic_report_digest": semantic_report.report_digest,
+                    "semantic_bundle_digest": semantic_bundle.bundle_digest,
+                    "semantic_plan_binding_digest": semantic_binding_digest,
+                    "semantic_scope": list(semantic_report.scope),
+                    "semantic_limitations": list(semantic_report.limitations),
                 }
             )
         elif task_id == "multilingual_alert":
@@ -376,9 +405,7 @@ class StormShiftFixtureWorkers:
                 {
                     "plan_digest": self._reference_plan.plan_digest,
                     "preview": normalize(self._reference_plan.alert),
-                    "publication_disposition": (
-                        self._reference_plan.publication_disposition.value
-                    ),
+                    "publication_disposition": (self._reference_plan.publication_disposition.value),
                     "simulation_only": True,
                     "external_publication_attempted": False,
                 }
@@ -458,9 +485,7 @@ class StormShiftRuntime:
         self.store = store
         self.effect_broker = effect_broker
         self.fixture_workers = StormShiftFixtureWorkers(self.scenario)
-        validator_revision = (
-            f"{STRUCTURAL_VALIDATOR_REVISION}:{self.scenario.fixture_digest}"
-        )
+        validator_revision = f"{STRUCTURAL_VALIDATOR_REVISION}:{self.scenario.fixture_digest}"
         self.executor = AsyncGraphExecutor(
             store,
             workers=self.fixture_workers.workers,
@@ -487,6 +512,28 @@ class StormShiftRuntime:
         if not validation.passed or not validation.verify_digest():
             raise StormShiftRuntimeInvariantError(
                 "the final response plan failed deterministic structural validation"
+            )
+
+        count = self.scenario.evacuee_demand
+        english_fragment = f"{count} people"
+        spanish_fragment = f"{count} personas"
+        if (
+            english_fragment not in response_plan.alert.english
+            or spanish_fragment not in response_plan.alert.spanish
+        ):
+            raise StormShiftRuntimeInvariantError(
+                "the final alert is not bound to the controlled evacuation fact"
+            )
+        semantic_bundle = build_reference_semantic_bundle(
+            scenario_id=self.scenario.scenario_id,
+            evacuee_count=count,
+            english_statement=english_fragment,
+            spanish_statement=spanish_fragment,
+        )
+        semantic_validation = StormShiftSemanticSafetyVerifier().verify(semantic_bundle)
+        if not semantic_validation.passed or not semantic_validation.verify_digest():
+            raise StormShiftRuntimeInvariantError(
+                "the final response plan failed bounded semantic safety validation"
             )
 
         alert_output = _require_mapping(
@@ -519,6 +566,21 @@ class StormShiftRuntime:
             raise StormShiftRuntimeInvariantError(
                 "durable safety review is not bound to the final validation report"
             )
+        semantic_binding_digest = content_digest(
+            {
+                "plan_digest": response_plan.plan_digest,
+                "bundle_digest": semantic_bundle.bundle_digest,
+                "report_digest": semantic_validation.report_digest,
+            }
+        )
+        if (
+            safety_output.get("semantic_report_digest") != semantic_validation.report_digest
+            or safety_output.get("semantic_bundle_digest") != semantic_bundle.bundle_digest
+            or safety_output.get("semantic_plan_binding_digest") != semantic_binding_digest
+        ):
+            raise StormShiftRuntimeInvariantError(
+                "durable safety review is not bound to bounded semantic validation"
+            )
         if content_digest(alert_preview) != content_digest(normalize(response_plan.alert)):
             raise StormShiftRuntimeInvariantError(
                 "alert preview is not bound to the final response plan"
@@ -528,6 +590,7 @@ class StormShiftRuntime:
             execution=execution,
             response_plan=response_plan,
             validation=validation,
+            semantic_validation=semantic_validation,
             alert_preview=alert_preview,
             effect_intent=effect_intent,
             worker_call_counts=self.fixture_workers.call_counts,

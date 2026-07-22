@@ -3,45 +3,247 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUTF8: "1"
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  python:
+    name: Python ${{ matrix.python-version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+            coverage: true
+            lint: true
+            extras: dev,langgraph
+          - os: ubuntu-latest
+            python-version: "3.12"
+            coverage: false
+            lint: false
+            extras: dev
+          - os: ubuntu-latest
+            python-version: "3.13"
+            coverage: false
+            lint: false
+            extras: dev
+          - os: ubuntu-latest
+            python-version: "3.14"
+            coverage: false
+            lint: false
+            extras: dev
+          - os: windows-latest
+            python-version: "3.11"
+            coverage: false
+            lint: false
+            extras: dev
+          - os: macos-latest
+            python-version: "3.14"
+            coverage: false
+            lint: false
+            extras: dev
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # Major-version tags resolved to these immutable commits on 2026-07-22.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install
-        run: python -m pip install -e ".[dev]"
-      - name: Lint
-        run: python -m ruff check .
+          cache-dependency-path: |
+            pyproject.toml
+            requirements/test-tools.txt
+      - name: Verify fresh clean checkout
+        run: >-
+          python -c "import subprocess;
+          s=subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=all'],text=True);
+          assert not s,s"
+      - name: Install pinned gate tooling and project
+        run: |
+          python -m pip install "pip==26.1.2"
+          python -m pip install -r requirements/test-tools.txt
+          python -m pip install -e ".[${{ matrix.extras }}]"
       - name: Dependency consistency
         run: python -m pip check
-      - name: Test with coverage
-        run: python -m pytest --cov=agent_physics --cov-report=term-missing --cov-fail-under=85
-      - name: Preflight smoke test
-        run: python -m agent_physics.cli preflight
+      - name: Ruff
+        if: ${{ matrix.lint }}
+        run: python -m ruff check .
+      - name: Test with coverage floor
+        if: ${{ matrix.coverage }}
+        run: >-
+          python -m pytest
+          --cov=agent_physics
+          --cov-report=term-missing
+          --cov-fail-under=90
+      - name: Test
+        if: ${{ !matrix.coverage }}
+        run: python -m pytest
+      - name: Installed CLI preflight
+        run: agent-physics preflight
       - name: Judge-bundle CLI smoke test
-        if: matrix.python-version == '3.11'
+        if: ${{ matrix.coverage }}
         run: python -m agent_physics.cli judge-bundle --revision ci-unverified
+      - name: Tests did not mutate tracked files
+        run: >-
+          python -c "import subprocess;
+          s=subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=all'],text=True);
+          assert not s,s"
+
+  package-candidate:
+    name: Build and inspect release candidate
+    needs: python
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements/release-tools.txt
+      - name: Verify fresh clean checkout
+        run: >-
+          python -c "import subprocess;
+          s=subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=all'],text=True);
+          assert not s,s"
+      - name: Install pinned gate tooling and project
+        run: |
+          python -m pip install "pip==26.1.2"
+          python -m pip install -r requirements/release-tools.txt
+          python -m pip install -e ".[dev,api,watsonx,langgraph]"
+          python -m pip check
+      - name: Capture deterministic source inputs
+        id: source
+        shell: bash
+        run: |
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "epoch=$(git log -1 --pretty=%ct)" >> "$GITHUB_OUTPUT"
+      - name: Build wheel and source distribution twice
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.source.outputs.epoch }}
+        shell: bash
+        run: |
+          mkdir -p artifacts/release-build/raw-a artifacts/release-build/raw-b
+          mkdir -p artifacts/release-build/dist-a artifacts/release-build/dist-b
+          python -m build --sdist --wheel --outdir artifacts/release-build/raw-a
+          python -m build --sdist --wheel --outdir artifacts/release-build/raw-b
+          cp artifacts/release-build/raw-a/*.whl artifacts/release-build/dist-a/
+          cp artifacts/release-build/raw-b/*.whl artifacts/release-build/dist-b/
+          for input in artifacts/release-build/raw-a/*.tar.gz; do
+            python scripts/normalize_sdist.py "$input" \
+              "artifacts/release-build/dist-a/$(basename "$input")" \
+              --source-date-epoch "$SOURCE_DATE_EPOCH"
+          done
+          for input in artifacts/release-build/raw-b/*.tar.gz; do
+            python scripts/normalize_sdist.py "$input" \
+              "artifacts/release-build/dist-b/$(basename "$input")" \
+              --source-date-epoch "$SOURCE_DATE_EPOCH"
+          done
+          diff --recursive --no-dereference \
+            artifacts/release-build/dist-a artifacts/release-build/dist-b
+      - name: Validate package metadata rendering
+        run: python -m twine check artifacts/release-build/dist-a/*
+      - name: Generate deterministic candidate evidence twice
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.source.outputs.epoch }}
+          SOURCE_REVISION: ${{ steps.source.outputs.revision }}
+        shell: bash
+        run: |
+          python scripts/generate_release_candidate.py \
+            --dist-dir artifacts/release-build/dist-a \
+            --output-dir artifacts/release-build/candidate \
+            --source-revision "$SOURCE_REVISION" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --source-state clean
+          python scripts/generate_release_candidate.py \
+            --dist-dir artifacts/release-build/dist-a \
+            --output-dir artifacts/release-build/candidate-repeat \
+            --source-revision "$SOURCE_REVISION" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --source-state clean
+          diff --recursive --no-dereference \
+            artifacts/release-build/candidate artifacts/release-build/candidate-repeat
+      - name: Verify candidate evidence offline
+        run: >-
+          python scripts/verify_release_candidate.py
+          artifacts/release-build/candidate
+      - name: Validate CycloneDX schema
+        run: >-
+          python scripts/validate_sbom.py
+          artifacts/release-build/candidate/release-candidate.sbom.cdx.json
+      - name: Rebuild a wheel from the source distribution
+        shell: bash
+        run: |
+          mkdir artifacts/release-build/rebuilt
+          python -m pip wheel --no-deps \
+            --wheel-dir artifacts/release-build/rebuilt \
+            artifacts/release-build/dist-a/*.tar.gz
+          python -c "from pathlib import Path; assert len(list(Path('artifacts/release-build/rebuilt').glob('*.whl'))) == 1"
+      - name: Smoke-test the built wheel in a clean environment
+        shell: bash
+        run: |
+          python -m venv artifacts/release-build/smoke-venv
+          artifacts/release-build/smoke-venv/bin/python -m pip install "pip==26.1.2"
+          artifacts/release-build/smoke-venv/bin/python -m pip install \
+            artifacts/release-build/dist-a/*.whl
+          artifacts/release-build/smoke-venv/bin/python -m pip check
+          artifacts/release-build/smoke-venv/bin/agent-physics preflight
+          EXPECTED_VERSION=$(python -c \
+            "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          export EXPECTED_VERSION
+          artifacts/release-build/smoke-venv/bin/python -c \
+            "import importlib.metadata as m, os; assert m.version('agent-physics') == os.environ['EXPECTED_VERSION']"
+      - name: Audit resolved all-extras and release-tool environment
+        shell: bash
+        run: |
+          mkdir artifacts/release-build/security-reports
+          python -m pip freeze --all --exclude agent-physics \
+            > artifacts/release-build/security-reports/resolved-all-extras.txt
+          python -m pip_audit \
+            --strict \
+            --progress-spinner off \
+            --format json \
+            --output artifacts/release-build/security-reports/pip-audit.json \
+            --requirement artifacts/release-build/security-reports/resolved-all-extras.txt
+      - name: Pipeline did not mutate the checkout
+        run: >-
+          python -c "import subprocess;
+          s=subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=all'],text=True);
+          assert not s,s"
+      - name: Upload candidate and advisory report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: finite-release-candidate-${{ github.sha }}
+          path: |
+            artifacts/release-build/candidate/
+            artifacts/release-build/security-reports/
+          if-no-files-found: error
+          retention-days: 14
 
   console:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: apps/physics-console
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22.13.0"
           cache: npm
@@ -57,14 +259,21 @@ jobs:
 
   langgraph-comparator:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install pinned external comparator
-        run: python -m pip install -e ".[dev,langgraph]"
+          cache-dependency-path: |
+            pyproject.toml
+            requirements/test-tools.txt
+      - name: Install pinned test tooling and comparator
+        run: |
+          python -m pip install "pip==26.1.2"
+          python -m pip install -r requirements/test-tools.txt
+          python -m pip install -e ".[dev,langgraph]"
       - name: Dependency consistency
         run: python -m pip check
       - name: LangGraph conformance tests
@@ -74,7 +283,9 @@ jobs:
           python -m agent_physics.cli langgraph-baseline
           --run-id ci-langgraph-static-v1
           --output artifacts/langgraph-baseline.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: langgraph-static-comparator
           path: artifacts/langgraph-baseline.json
+          if-no-files-found: error
+          retention-days: 14

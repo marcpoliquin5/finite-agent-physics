@@ -1,0 +1,5 @@
+# Direct cross-platform test tools pinned on 2026-07-22. Transitive dependencies are not locked.
+pip==26.1.2
+pytest-cov==7.1.0
+pytest==9.1.1
+ruff==0.15.22

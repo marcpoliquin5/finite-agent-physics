@@ -1,90 +1,128 @@
-# Implemented boundary and known limitations
+# Known limitations and claim boundaries
 
-FINITE is an ambitious systems prototype, but its claims are intentionally narrower than its
-roadmap. This file is the fastest way to distinguish working behavior from future work.
+FINITE is a v5 **release candidate**, not a production control plane and not a stable v5 release.
+This file is normative for demos and project-page claims. A passing local test narrows uncertainty;
+it does not turn fixture, simulated, estimated, private, or human-unverified evidence into live fact.
 
-## What the current evidence supports
+## IBM and challenge evidence
 
-- Deterministic schedule simulation over pinned task and backend profiles.
-- Strict workflow schema v1 compilation from Python, JSON, and safe YAML to one canonical
-  digest. Schema v1 intentionally lacks alternatives, speculation, and typed artifact ports.
-- Conservative adaptive admission against deadline, quality, modeled reliability, token,
-  cost, context, global concurrency, provider concurrency, and effect-conflict constraints.
-- A fixture-only async executor that applies adaptive admission before dispatch, reserves
-  declared retry worst case, checks reported actual use against each reservation, and resumes
-  validated durable outputs from an immutable execution manifest.
-- Proposed effect intents, approval and fencing checks, idempotent simulation-only delivery,
-  ambiguous-crash recovery, and compensation behavior against a local simulated target.
-- Typed, fictional StormShift inputs and structural validators for declared capacity, route,
-  accessibility fields, bilingual numeric parity, evidence identity/freshness, and publication
-  disposition. Ten trusted fixture nodes now produce a meaningful response plan and alert
-  preview, while the declared publication node stops at a proposed intent; restart reconstructs
-  every durable output without repeating a worker call.
-- A complete deterministic experiment matrix: one nominal control and four pre-dispatch fault
-  transformations, 30 frozen paired seeds, and three simulator policies.
-- A deterministic 10,000-transition local resource-ledger corpus with independent replay; it
-  proves the integer accounting model, not remote-provider containment or distributed locking.
-- A deterministic declared-quota corpus for one local guard, including RPM, TPM, concurrency,
-  reset windows, bounded retries, deadlines, settlement, and independent event replay.
-- Digest-bound residual-graph replanning over explicit caller-reported progress and typed
-  capacity, slowdown, failure, and envelope events.
-- One structured post-hoc numeric explanation per deterministic scheduler event, derived from
-  public graph, envelope, schedule, and event fields without hidden-reasoning access.
-- A digest-bound console artifact with 1,080 generated pressure-grid states plus registered
-  resource-ledger, quota, replanning, explanation, and experiment summaries.
+- The repository does not yet contain a genuine entrant-owned IBM Bob build-log entry.
+- MCP configuration and protocol tests prove compatibility, not substantive Bob use.
+- No environment available during the current build contained watsonx credentials or a Bob session
+  reference, so no live Granite receipt was produced.
+- Injected inference tests are labeled `injected-test-double`; they are never IBM provider evidence.
+- Eligibility, registration, team membership, rule acceptance, SkillsBuild completion, video
+  publication, project-page publication, and submission receipts require entrant action.
 
-## What the current evidence does not support
+## Workflow and scheduling limits
 
-- No claim that FINITE defeats physical or computational limits. It exposes constraints and
-  refuses or changes plans within them.
-- No measured speed, cost, quality, energy, or reliability superiority over LangChain,
-  LangGraph, BeeAI, or any other production framework.
-- `static_parallel` and `sequential` are development references, not tuned framework baselines.
-- No physical-runtime benchmark. Simulator durations and success probabilities are pinned
-  model inputs; planning-model bounds are not measurements of hardware or network physics.
-- No live Granite/watsonx result until a real provider receipt is captured and published.
-- No completed IBM Bob provenance until genuine Bob sessions and Bob MCP calls are logged.
-- StormShift structural checks do not prove semantic translation equivalence, claim
-  entailment, rendered accessibility, or any external agency or delivery-system state.
-- Provider-429 StormShift data is marker-only. Its latency and budget parameter transforms are
-  not wired into the StormShift executor or scheduler path.
-- The quota guard does not discover or measure a provider's limits. Its aggregate “global” caps
-  are local to one guard instance; they are not shared cross-process or across guard instances.
-- Replanning does not pause, cancel, lease, or mutate a live executor or remote call. Progress,
-  elapsed time, settled usage, and effect-terminal facts are caller-supplied modeled inputs.
-- Replan event payloads do not yet carry a run ID, target revision, or prior-state digest. The
-  current API assumes trusted routing supplies the event to the intended durable state; adding
-  those bindings requires a versioned event-contract change.
-- Structured explanations cover `Scheduler`/`ScheduleResult` events only—not quota, executor,
-  context, effect-outbox, or resource-ledger events—and do not prove semantic causality.
+- Workflow execution is DAG-oriented. General loops, dynamic fan-out, recursive subgraphs, and
+  speculative winner/loser branches are not production-supported semantics.
+- Admission is conservative and can refuse work that might succeed under favorable stochastic
+  conditions. A refusal is not a mathematical proof covering every possible backend or plan.
+- Profile p50/p95 latency, failure, quality, cost, quota, and physical values are declared inputs;
+  they are not continuously calibrated production telemetry.
+- Heuristic scheduling is deterministic for the declared model but is not a globally optimal
+  multi-resource solver.
+- Runtime replanning is local and single-coordinator. There is no replicated scheduler, leader
+  election, distributed lease service, work stealing, or high-availability failover.
 
-## Runtime limitations
+## Physical-resource limits
 
-- Exactly one active executor is assumed per run ID. Distributed use needs a durable lease,
-  fencing, and leader/failover design.
-- Injected Python workers and validators are trusted cooperative fixtures, not a security
-  sandbox. A falsely declared pure callable could perform undeclared work.
-- Provider-side token, cost, cancellation, and capability enforcement are adapter work; local
-  accounting cannot prevent a remote provider from overrunning its own call boundary.
-- A hard process crash before usage reporting leaves actual consumption unknown, although the
-  attempt's declared worst-case reservation remains inside the admitted envelope.
-- Worst-case retry reservation is intentionally conservative and can refuse a plan that might
-  fit probabilistically.
-- Worker task IDs are manifest-bound; production manifests should additionally pin explicit
-  worker implementation digests.
-- Run and effect ledgers are separate SQLite transaction domains. Stable idempotency repairs
-  the demonstrated crash gap, but there is no cross-database atomic transaction.
-- A run with a proposed, uncommitted effect reports `awaiting_effects`; a later executor pass or
-  monitor is required to observe the effect's eventual terminal state.
+- CPU time, peak RAM, peak VRAM, storage IO, network bytes, bandwidth, RTT, and egress cost are
+  integer profile estimates used for conservative admission.
+- Peak RAM, VRAM, and bandwidth use conservative top-`max_parallelism` aggregation and can
+  overestimate concurrency when graph dependencies prevent overlap.
+- Transfer bounds omit protocol overhead, retransmission, time-varying throughput, queueing,
+  allocator fragmentation, cache/IO amplification, and infrastructure replication.
+- Egress cost is a declared profile value and is not reconciled with a cloud invoice.
+- The transport/RTT critical-path figure is a lower bound, not measured makespan.
+- Energy and thermal use are explicitly unsupported because no hardware telemetry is present.
 
-## Experimental limitations
+## Executor and adapter limits
 
-- Faults transform declared graph or envelope data before dispatch; they do not disrupt a live
-  model, network, provider queue, or worker process.
-- Results are descriptive deterministic evidence, not a causal estimate or public superiority
-  claim.
-- Confidence intervals summarize frozen simulator outputs; they do not turn modeled inputs
-  into empirical provider measurements.
-- The experiment revision string is caller supplied. Record digests detect ordinary mutation
-  and incomplete designs, but a coordinated relabel-and-recompute attack requires an external
-  trusted manifest, signature, or published commit to authenticate provenance.
+- Fixture workers are trusted in-process Python callables. There is no hostile-code sandbox,
+  filesystem/network isolation, syscall policy, or container boundary.
+- One active process owns each locally active run. SQLite protects durable data but does not grant
+  distributed ownership semantics.
+- Cooperative cancellation is visible; uncooperative in-process work cannot always be force-killed.
+- The watsonx SDK call runs in a thread and has no safe Python hard-kill. Late settlement can be
+  refused, but production hard cancellation requires process isolation.
+- Worst-case retry reservation is intentionally conservative and can refuse a probabilistically
+  feasible attempt.
+- Provider token use must be reported for Granite settlement. Missing usage fails rather than being
+  fabricated as zero.
+- Admitted micro-USD is a profile upper bound, not watsonx billing telemetry.
+
+## Artifact, context, and semantic limits
+
+- The artifact store is local and content-addressed; it is not a replicated, encrypted,
+  multi-region object service.
+- Sensitivity and trust fields are declared metadata. There is no enterprise DLP classifier,
+  residency enforcement, KMS integration, or legal-hold service.
+- Token fit uses a conservative estimator unless a provider tokenizer is explicitly integrated.
+- Semantic safety checks cover declared StormShift invariants and structured evidence. They do not
+  prove general natural-language entailment, factual truth, translation quality, accessibility
+  conformance, or safety for arbitrary domains.
+- Accessibility evidence is structural/attested unless a recorded rendered-browser audit says
+  otherwise.
+- Hostile text is prevented from widening authority in tested paths; this is not a claim of universal
+  prompt-injection immunity.
+
+## Effect-system limits
+
+- The effect adapter used in tests is simulation-only. No real alert, message, purchase, filing,
+  account mutation, or government/agency system is contacted.
+- Run and effect ledgers are separate SQLite transaction domains; there is no cross-database atomic
+  transaction.
+- Stable idempotency repairs the demonstrated crash ambiguity only when the target honors the same
+  key and semantics. Every production target requires its own proof.
+- Approval grants use a local deterministic authority for testing; production human identity,
+  OIDC/IAM, delegation, revocation, and audit review are not implemented.
+- A run with an uncommitted proposed effect reports `awaiting_effects`, never `completed`.
+
+## API and deployment limits
+
+- The REST/SSE service implements exact-origin CORS and optional bearer authentication. It does not
+  implement TLS termination, distributed rate limiting, OIDC, tenant RBAC, WAF policy, automated
+  retention, or HA deployment.
+- The in-memory active-task registry is process-local. Durable events survive restart, but automatic
+  reattachment/relaunch policy remains an operator responsibility.
+- The console's bearer token is kept in browser memory for the session; it is not an enterprise
+  credential-management solution.
+- The current Sites console deployment is owner-only. It is not an anonymous public judge path.
+- No public FINITE API deployment has been verified from an unsigned or judge account.
+
+## Verification and release limits
+
+- Hashes are tamper-evident identities, not signatures or trusted timestamps. Authenticity requires
+  an immutable public commit/tag or another trusted attestation.
+- The whole-run verifier is separate from live planner state in code and inputs, but ships in the
+  same Python distribution; it is not an independently administered third-party audit.
+- Coverage supports test evidence but does not prove missing semantics or external integrations.
+- Release-candidate SBOM and SLSA-style provenance are deterministic local metadata. They are not a
+  Sigstore signature, transparency-log entry, or trusted remote builder attestation.
+- Candidate artifacts set `release_ready=false`. Stable `v5.0.0` is prohibited until every
+  conjunctive gate in `V5_RELEASE_CONTRACT.md` passes at one clean public commit.
+
+## Framework-comparison limits
+
+- The neutral runner and exact-pinned LangGraph witness use the same local fixture fingerprint and
+  guardrails. They do not represent every tuning option or production deployment of LangGraph.
+- Plain Python and LangGraph provide reference/conformance evidence; a local benchmark cannot prove
+  FINITE universally better than an ecosystem or framework.
+- PageAgent is a DOM-native browser agent. It is documented for architectural comparison but is not
+  executed on the non-equivalent StormShift orchestration workload. `not-executed` is not zero.
+- LangChain ecosystem breadth, integrations, hosted LangSmith capabilities, and user adoption are
+  outside this repository's comparison proof.
+- Any statistical headline must come from the preregistered contract, include failures, publish raw
+  records, and pass its threshold. Negative or baseline wins must remain visible.
+
+## StormShift and public-safety boundary
+
+- StormShift is fictional and demonstrates control-plane mechanics, not operational emergency
+  expertise.
+- No output should be used as an emergency instruction, accessibility certification, translation
+  certification, or agency recommendation.
+- Miami-Dade is challenge context only. FINITE is not affiliated with, endorsed by, connected to,
+  or deployed by Miami-Dade County or any emergency/public-safety organization.

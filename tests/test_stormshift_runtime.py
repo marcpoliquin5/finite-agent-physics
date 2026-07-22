@@ -52,7 +52,9 @@ def test_runtime_executes_meaningful_fixture_graph_and_stops_before_write(tmp_pa
     assert result.validation.verify_digest()
     assert result.validation.scope == VALIDATION_SCOPE
     assert result.validation.limitations == VALIDATION_LIMITATIONS
-    assert result.validator_kind == "deterministic_structural_only"
+    assert result.validator_kind == "deterministic_structural_plus_bounded_semantic"
+    assert result.semantic_validation.passed is True
+    assert result.semantic_validation.verify_digest() is True
     assert result.alert_preview["english_language_tag"] == "en"
     assert result.alert_preview["spanish_language_tag"] == "es"
     assert result.alert_preview["english"] == result.response_plan.alert.english
@@ -73,9 +75,7 @@ def test_runtime_executes_meaningful_fixture_graph_and_stops_before_write(tmp_pa
         for event in result.execution.events
         if event.event_type == "task.attempt_started"
     )
-    assert any(
-        event.event_type == "run.awaiting_effects" for event in result.execution.events
-    )
+    assert any(event.event_type == "run.awaiting_effects" for event in result.execution.events)
     assert not any(event.event_type == "run.completed" for event in result.execution.events)
 
 
@@ -97,9 +97,7 @@ def test_restart_revalidates_every_output_without_worker_reexecution(tmp_path) -
 
     assert first.worker_call_counts == {task_id: 1 for task_id in PURE_TASK_IDS}
     assert restarted.worker_call_counts == {task_id: 0 for task_id in PURE_TASK_IDS}
-    assert restarted.execution.resumed_task_ids == tuple(
-        sorted((*PURE_TASK_IDS, PUBLISH_TASK_ID))
-    )
+    assert restarted.execution.resumed_task_ids == tuple(sorted((*PURE_TASK_IDS, PUBLISH_TASK_ID)))
     assert len(restarted.execution.events) == first_event_count
     assert restarted.execution.outputs == first.execution.outputs
     assert restarted.response_plan == first.response_plan

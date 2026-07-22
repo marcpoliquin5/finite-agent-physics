@@ -8,7 +8,9 @@ Describe the user-visible promise, failure mode, or `PROGRAM.md` acceptance gate
 - [ ] Failure-path test
 - [ ] Replay/tamper test where evidence or state changes
 - [ ] `python -m ruff check .`
-- [ ] `python -m pytest --cov=agent_physics --cov-fail-under=85`
+- [ ] `python -m pytest --cov=agent_physics --cov-fail-under=90`
+- [ ] Wheel/sdist build, package-content validation, SBOM/provenance/checksum verification
+- [ ] Python and npm advisory audits (network-backed and time-varying)
 - [ ] Console tests/lint/audit when UI or exported artifacts change
 
 ## Claim and trust boundary

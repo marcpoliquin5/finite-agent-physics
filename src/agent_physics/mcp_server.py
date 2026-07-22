@@ -1,17 +1,31 @@
-"""Bob-facing MCP tools for the deterministic FINITE vertical slice."""
+"""Bob-facing MCP tools for the durable FINITE lifecycle and evidence drills."""
 
 from __future__ import annotations
 
+import sqlite3
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from .adaptive_runtime import (
+    ADAPTIVE_RUNTIME_LIMITATIONS,
+    ADAPTIVE_RUNTIME_SCOPE,
+    AdaptiveStatus,
+    run_adaptive_recovery_drill,
+)
+from .artifact_store import (
+    ArtifactIntegrityError,
+    ArtifactProvenance,
+    SQLiteArtifactStore,
+    transformation_digest,
+)
 from .artifacts import Artifact, EvidenceSet, Sensitivity
 from .benchmark import REGISTERED_FAULTS
+from .bob_lifecycle import default_bob_run_service
 from .context import ContextBudget, ContextObligations, ContextPacker
-from .contracts import EffectClass
+from .contracts import BackendProfile, EffectClass, RunEnvelope, TaskContract
 from .decision_explanations import DERIVATION_SCOPE, explain_schedule
 from .effects import (
     AmbiguousCommit,
@@ -23,11 +37,22 @@ from .effects import (
 from .experiments import run_registered_experiments, summarize_experiments
 from .examples import miami_eoc_envelope, miami_eoc_graph
 from .feasibility import FeasibilityAnalyzer
+from .framework_conformance import (
+    PINNED_LANGGRAPH_CHECKPOINT_VERSION,
+    PINNED_LANGGRAPH_VERSION,
+    FrameworkUnavailableError,
+    PinnedFrameworkVersionError,
+    langgraph_conformance_available,
+    run_pinned_langgraph_conformance_witness,
+)
+from .graph import ExecutionGraph
 from .ledger import verify_conservation
+from .physical_resources import PhysicalResourceAnalyzer
 from .provider_quota import GLOBAL_GUARD_SCOPE, MODEL_SCOPE, run_seeded_burst_corpus
 from .replanning import EventDrivenReplanner, ProviderCapacityEvent, RunProgressSnapshot
 from .run_store import SQLiteRunStore, Usage
 from .scheduler import SchedulePolicy, Scheduler
+from .serialization import content_digest
 from .stormshift import (
     BilingualAlert,
     PublicationDisposition,
@@ -46,11 +71,16 @@ def finite_capabilities() -> dict[str, Any]:
 
     return {
         "schema_version": "finite-mcp-capabilities/v1",
-        "stage": "deterministic-simulation",
-        "tool_count": 13,
+        "stage": "durable-local-and-live-ready",
+        "tool_count": 22,
         "tools": (
             "finite_capabilities",
             "finite_preflight",
+            "finite_granite_preflight",
+            "finite_run",
+            "finite_status",
+            "finite_explain_run",
+            "finite_verify_run",
             "finite_simulate",
             "finite_verify",
             "finite_registered_faults",
@@ -62,6 +92,10 @@ def finite_capabilities() -> dict[str, Any]:
             "finite_quota_corpus",
             "finite_replanning_drill",
             "finite_decision_explanation_drill",
+            "finite_physical_admission_drill",
+            "finite_adaptive_recovery_drill",
+            "finite_framework_conformance_drill",
+            "finite_artifact_integrity_drill",
         ),
         "implemented": [
             "constraint and graph validation",
@@ -76,13 +110,20 @@ def finite_capabilities() -> dict[str, Any]:
             "durable simulation-only effect intents, approvals, fencing, and outbox",
             "durable fixture execution with bounded retries, deadlines, cancellation, and resume",
             "StormShift structural capacity, route, declared-accessibility, bilingual-numeric, evidence, and publication validators",
+            "StormShift completion/effect-intent gating on bounded controlled-fact semantic, taint, freshness, URL, bilingual, and static-accessibility checks",
             "complete paired deterministic fault experiments with confidence intervals",
             "declared local RPM, TPM, concurrency, reset, and bounded-retry quota replay",
             "event-driven residual-graph replanning over caller-reported progress",
             "content-addressed post-hoc numeric explanations for replay-verified schedules",
+            "strict signed-int64 physical-resource admission over declared nonzero CPU, RAM, VRAM, storage, network, bandwidth, RTT, and egress estimates",
+            "durable adaptive crash/restart recovery with unknown-inflight reservation charging and call-free control-ledger replay",
+            "loss-accounted neutral framework wrappers plus a conditional executable witness for the pinned LangGraph comparator",
+            "restart-safe SQLite artifact deduplication, lineage verification, and deliberate local tamper detection",
+            "one durable Bob preflight-run-status-explain-verify lifecycle",
+            "admitted watsonx Granite execution with provider-token receipts and resume without recall",
         ],
         "not_implemented": [
-            "live IBM Granite or watsonx execution",
+            "entrant-owned genuine Bob and live-watsonx evidence capture",
             "live-model semantic output validation",
             "authenticated production-IAM external-effect commit",
             "cross-run distributed locks",
@@ -92,15 +133,82 @@ def finite_capabilities() -> dict[str, Any]:
             "live executor mutation from modeled replan decisions",
             "model chain-of-thought or hidden-reasoning access",
             "physical-runtime measurement",
+            "hardware energy telemetry",
+            "Alibaba PageAgent integration or BeeAI adapter support",
+            "general cross-framework semantic equivalence",
         ],
         "boundaries": {
             "external_effects_possible": False,
-            "live_provider_calls": False,
+            "default_live_provider_calls": False,
+            "explicit_live_provider_mode_available": True,
+            "live_provider_evidence_captured": False,
             "reasoning_access": False,
-            "safety": "All current scenario backends and effects are simulated.",
+            "physical_resource_evidence": "declared-estimates-not-runtime-measurement",
+            "langgraph_witness": "conditional-on-reviewed-pinned-dependencies",
+            "alibaba_pageagent_integration": False,
+            "beeai_support": False,
+            "safety": (
+                "Fixture backends and all effects are simulated. Granite mode is an explicit "
+                "provider call and still cannot commit an external effect."
+            ),
         },
-        "safety": "All current scenario backends and effects are simulated.",
+        "safety": (
+            "Fixture backends and all effects are simulated. Granite mode is explicit opt-in "
+            "and has no external-effect adapter."
+        ),
     }
+
+
+def finite_granite_preflight(max_new_tokens: int = 256) -> dict[str, Any]:
+    """Validate credentials and admission for Granite without calling watsonx."""
+
+    return default_bob_run_service().granite_preflight(max_new_tokens=max_new_tokens)
+
+
+async def finite_run(
+    run_id: str,
+    mode: str = "fixture",
+    instruction: str = "",
+    max_new_tokens: int = 256,
+    bob_session_ref: str | None = None,
+) -> dict[str, Any]:
+    """Start or resume one durable run.
+
+    ``fixture`` is deterministic and local. ``granite-probe`` is explicit opt-in to one
+    admitted watsonx call when the task has not already completed; it requires configured
+    credentials and a non-empty instruction. A caller-provided Bob reference remains an
+    unverified assertion until entrant-owned Bob evidence is captured separately.
+    """
+
+    service = default_bob_run_service()
+    if mode == "fixture":
+        return await service.run_fixture(run_id=run_id, bob_session_ref=bob_session_ref)
+    if mode == "granite-probe":
+        return await service.run_granite_probe(
+            run_id=run_id,
+            instruction=instruction,
+            max_new_tokens=max_new_tokens,
+            bob_session_ref=bob_session_ref,
+        )
+    raise ValueError("mode must be one of: fixture, granite-probe")
+
+
+def finite_status(run_id: str) -> dict[str, Any]:
+    """Return the durable public summary for a previously started FINITE run."""
+
+    return default_bob_run_service().summary(run_id).as_dict()
+
+
+def finite_explain_run(run_id: str, include_payloads: bool = False) -> dict[str, Any]:
+    """Explain a durable run from recorded public facts, never hidden reasoning."""
+
+    return default_bob_run_service().explain(run_id, include_payloads=include_payloads)
+
+
+def finite_verify_run(run_id: str) -> dict[str, Any]:
+    """Fail closed on control-ledger violations for a durable run."""
+
+    return default_bob_run_service().verify(run_id)
 
 
 def finite_preflight(
@@ -131,9 +239,7 @@ def finite_preflight(
     certificate, result = FeasibilityAnalyzer().analyze(miami_eoc_graph(), envelope)
     payload = certificate.as_dict()
     payload["measurement_kind"] = "deterministic-simulation"
-    payload["trace_digest"] = verify_conservation(
-        miami_eoc_graph(), envelope, result
-    ).trace_digest
+    payload["trace_digest"] = verify_conservation(miami_eoc_graph(), envelope, result).trace_digest
     return payload
 
 
@@ -435,6 +541,10 @@ async def finite_executor_drill() -> dict[str, Any]:
             "validation_digest_verified": first.validation.verify_digest(),
             "validation_scope": first.validation.scope,
             "validation_limitations": first.validation.limitations,
+            "semantic_validation_passed": first.semantic_validation.passed,
+            "semantic_validation_digest": first.semantic_validation.report_digest,
+            "semantic_validation_scope": first.semantic_validation.scope,
+            "semantic_validation_limitations": first.semantic_validation.limitations,
             "effect_output": effect_output,
             "event_type_counts": dict(sorted(event_counts.items())),
             "actual_usage": {
@@ -548,9 +658,7 @@ def finite_replanning_drill() -> dict[str, Any]:
                 "max_tokens": remaining.max_tokens,
                 "max_cost_microusd": remaining.max_cost_microusd,
                 "max_context_bytes": remaining.max_context_bytes,
-                "simulated_watsonx_capacity": remaining.provider_limit(
-                    "simulated-watsonx"
-                ),
+                "simulated_watsonx_capacity": remaining.provider_limit("simulated-watsonx"),
             }
             if remaining
             else None
@@ -629,6 +737,370 @@ def finite_decision_explanation_drill(
     return payload
 
 
+def finite_physical_admission_drill() -> dict[str, Any]:
+    """Exercise strict physical caps over explicit nonzero integer estimates.
+
+    The drill first admits a three-stage local fixture at exact declared caps, then lowers
+    the CPU-time cap by one cpu-ms and requires a refusal. Values are profile declarations,
+    not measurements; energy remains explicitly unsupported. No worker, provider, or external
+    effect is invoked.
+    """
+
+    profile_values = (
+        {
+            "name": "intake-estimate",
+            "cpu_time_ms": 11,
+            "peak_memory_bytes": 100,
+            "peak_vram_bytes": 20,
+            "storage_read_bytes": 1_000,
+            "storage_write_bytes": 100,
+            "network_ingress_bytes": 200,
+            "network_egress_bytes": 100,
+            "min_bandwidth_bps": 1_000_000,
+            "network_rtt_ms": 5,
+            "egress_cost_microusd": 2,
+        },
+        {
+            "name": "assessment-estimate",
+            "cpu_time_ms": 13,
+            "peak_memory_bytes": 120,
+            "peak_vram_bytes": 30,
+            "storage_read_bytes": 700,
+            "storage_write_bytes": 200,
+            "network_ingress_bytes": 300,
+            "network_egress_bytes": 200,
+            "min_bandwidth_bps": 1_500_000,
+            "network_rtt_ms": 7,
+            "egress_cost_microusd": 3,
+        },
+        {
+            "name": "alert-estimate",
+            "cpu_time_ms": 17,
+            "peak_memory_bytes": 80,
+            "peak_vram_bytes": 10,
+            "storage_read_bytes": 400,
+            "storage_write_bytes": 500,
+            "network_ingress_bytes": 100,
+            "network_egress_bytes": 400,
+            "min_bandwidth_bps": 500_000,
+            "network_rtt_ms": 11,
+            "egress_cost_microusd": 5,
+        },
+    )
+    profiles = tuple(
+        BackendProfile(
+            name=str(values["name"]),
+            provider="declared-local-fixture",
+            duration_ms_p50=10,
+            duration_ms_p95=20,
+            input_tokens=10,
+            output_tokens=5,
+            cost_microusd=10,
+            context_bytes=100,
+            quality=1.0,
+            cpu_time_ms=int(values["cpu_time_ms"]),
+            peak_memory_bytes=int(values["peak_memory_bytes"]),
+            peak_vram_bytes=int(values["peak_vram_bytes"]),
+            storage_read_bytes=int(values["storage_read_bytes"]),
+            storage_write_bytes=int(values["storage_write_bytes"]),
+            network_ingress_bytes=int(values["network_ingress_bytes"]),
+            network_egress_bytes=int(values["network_egress_bytes"]),
+            min_bandwidth_bps=int(values["min_bandwidth_bps"]),
+            network_rtt_ms=int(values["network_rtt_ms"]),
+            egress_cost_microusd=int(values["egress_cost_microusd"]),
+        )
+        for values in profile_values
+    )
+    graph = ExecutionGraph.from_tasks(
+        (
+            TaskContract("physical_intake", (profiles[0],)),
+            TaskContract("physical_assessment", (profiles[1],), ("physical_intake",)),
+            TaskContract("physical_alert", (profiles[2],), ("physical_assessment",)),
+        )
+    )
+    selected = {task.task_id: task.profiles[0] for task in graph.tasks}
+    exact_envelope = RunEnvelope(
+        deadline_ms=5_000,
+        max_tokens=45,
+        max_cost_microusd=30,
+        max_context_bytes=300,
+        max_parallelism=2,
+        provider_limits=(("declared-local-fixture", 2),),
+        max_cpu_time_ms=41,
+        max_peak_memory_bytes=220,
+        max_peak_vram_bytes=50,
+        max_storage_read_bytes=2_100,
+        max_storage_write_bytes=800,
+        max_network_ingress_bytes=600,
+        max_network_egress_bytes=700,
+        available_bandwidth_bps=2_500_000,
+        max_network_rtt_ms=11,
+        max_egress_cost_microusd=10,
+    )
+    analyzer = PhysicalResourceAnalyzer()
+    admitted = analyzer.analyze(graph, exact_envelope, selected)
+    refused = analyzer.analyze(
+        graph,
+        replace(exact_envelope, max_cpu_time_ms=40),
+        selected,
+    )
+    physical_fields = (
+        "cpu_time_ms",
+        "peak_memory_bytes",
+        "peak_vram_bytes",
+        "storage_read_bytes",
+        "storage_write_bytes",
+        "network_ingress_bytes",
+        "network_egress_bytes",
+        "min_bandwidth_bps",
+        "network_rtt_ms",
+        "egress_cost_microusd",
+    )
+    return {
+        "schema_version": "finite-physical-admission-drill/v1",
+        "measurement_kind": "declared-nonzero-integer-estimates",
+        "runtime_measurement_performed": False,
+        "energy_measurement_supported": False,
+        "live_provider_calls": False,
+        "external_effects_possible": False,
+        "all_declared_estimates_nonzero": all(
+            getattr(profile, field) > 0 for profile in profiles for field in physical_fields
+        ),
+        "strict_cap_dimensions": physical_fields,
+        "exact_cap_witness": admitted.as_dict(),
+        "one_cpu_ms_tighter_witness": refused.as_dict(),
+        "boundary_proof_passed": (
+            admitted.status.value == "admitted"
+            and refused.status.value == "refused"
+            and admitted.verify_digest()
+            and refused.verify_digest()
+            and tuple(check.dimension for check in refused.violations) == ("cpu_time",)
+        ),
+    }
+
+
+def finite_adaptive_recovery_drill() -> dict[str, Any]:
+    """Run the durable local 429/budget/capacity/crash/restart/replay proof.
+
+    One optional task becomes crash-ambiguous and is fully charged rather than recalled. A
+    fresh process resumes committed tasks, preserves mandatory work, and reconstructs the full
+    control ledger without worker calls. This drill uses only deterministic local workers.
+    """
+
+    with TemporaryDirectory(prefix="finite-adaptive-recovery-") as directory:
+        result = run_adaptive_recovery_drill(Path(directory) / "adaptive.sqlite3")
+    proof_passed = (
+        result.final_status is AdaptiveStatus.COMPLETED
+        and result.replay_passed
+        and result.control_digest == result.replay_control_digest
+        and result.external_provider_calls == 0
+        and result.restart_worker_calls == ("mandatory_alert",)
+        and set(result.unknown_task_ids).issubset(result.shed_task_ids)
+    )
+    return {
+        "schema_version": "finite-adaptive-recovery-drill/v1",
+        "measurement_kind": "deterministic-local-durable-crash-recovery",
+        "proof_passed": proof_passed,
+        "final_status": result.final_status.value,
+        "control_digest": result.control_digest,
+        "replay_control_digest": result.replay_control_digest,
+        "replay_passed": result.replay_passed,
+        "first_process_worker_calls": result.first_process_worker_calls,
+        "restart_worker_calls": result.restart_worker_calls,
+        "resumed_task_ids": result.resumed_task_ids,
+        "unknown_task_ids": result.unknown_task_ids,
+        "shed_task_ids": result.shed_task_ids,
+        "completed_task_ids": result.completed_task_ids,
+        "provider_reset_honored": result.provider_reset_honored,
+        "controller_record_count": result.controller_record_count,
+        "external_provider_calls": result.external_provider_calls,
+        "live_provider_calls": False,
+        "external_effects_possible": False,
+        "scope": ADAPTIVE_RUNTIME_SCOPE,
+        "limitations": ADAPTIVE_RUNTIME_LIMITATIONS,
+    }
+
+
+async def finite_framework_conformance_drill() -> dict[str, Any]:
+    """Execute the reviewed pinned LangGraph witness when its extras are installed.
+
+    An unavailable or version-mismatched dependency produces an explicit non-witness result.
+    A passing result comes from the real StateGraph and SQLite checkpointer comparator, while
+    retaining its semantic-loss ledger and proposal-only/no-model-call boundaries. This is not
+    Alibaba PageAgent, BeeAI, or general framework-equivalence evidence.
+    """
+
+    boundaries = (
+        "only an actual reviewed pinned LangGraph run may set actual_framework_execution true",
+        "fixture profile choices are static metadata and make no provider-model call",
+        "write effects stop at a local proposal and are never externally committed",
+        "this is not Alibaba PageAgent, BeeAI, or general semantic-equivalence evidence",
+    )
+    base: dict[str, Any] = {
+        "schema_version": "finite-framework-conformance-drill/v1",
+        "measurement_kind": "conditional-real-pinned-framework-execution",
+        "expected_langgraph_version": PINNED_LANGGRAPH_VERSION,
+        "expected_checkpoint_version": PINNED_LANGGRAPH_CHECKPOINT_VERSION,
+        "live_provider_calls": False,
+        "external_calls_made": False,
+        "external_effects_possible": False,
+        "alibaba_pageagent_exercised": False,
+        "beeai_exercised": False,
+        "claim_boundaries": boundaries,
+    }
+    if not langgraph_conformance_available():
+        return {
+            **base,
+            "status": "unavailable",
+            "verified": False,
+            "actual_framework_execution": False,
+            "reason": "install the pinned optional comparator with pip install -e .[langgraph]",
+        }
+    with TemporaryDirectory(prefix="finite-framework-conformance-") as directory:
+        try:
+            witness = await run_pinned_langgraph_conformance_witness(
+                run_id="finite-mcp-framework-conformance-v1",
+                checkpoint_path=Path(directory) / "langgraph.sqlite3",
+            )
+        except FrameworkUnavailableError as error:
+            return {
+                **base,
+                "status": "unavailable",
+                "verified": False,
+                "actual_framework_execution": False,
+                "reason": str(error),
+            }
+        except PinnedFrameworkVersionError as error:
+            return {
+                **base,
+                "status": "installed-version-not-reviewed",
+                "verified": False,
+                "actual_framework_execution": False,
+                "reason": str(error),
+            }
+    return {
+        **base,
+        "status": "passed",
+        "verified": witness.verify_digest(),
+        "actual_framework_execution": witness.actual_framework_execution,
+        "witness": {
+            **witness.unsigned_payload(),
+            "witness_digest": witness.witness_digest,
+        },
+    }
+
+
+def finite_artifact_integrity_drill() -> dict[str, Any]:
+    """Persist, restart, deduplicate, verify lineage, then detect local SQLite tampering.
+
+    The database is temporary and deleted after the drill. Tampering is deliberate and local;
+    no external store, network, model, or operational effect is used.
+    """
+
+    with TemporaryDirectory(prefix="finite-artifact-integrity-") as directory:
+        database = Path(directory) / "artifacts.sqlite3"
+        parent = Artifact.create(
+            b'{"source":"fictional-stormshift-fixture"}',
+            schema="stormshift.fixture-source",
+            schema_version="1.0.0",
+            media_type="application/json",
+            producer="finite-artifact-integrity-drill",
+            sensitivity=Sensitivity.INTERNAL,
+            created_at_ms=1_000,
+            fresh_until_ms=10_000,
+        )
+        child = Artifact.create(
+            b'{"derived":"bounded-simulation-preview"}',
+            schema="stormshift.derived-preview",
+            schema_version="1.0.0",
+            media_type="application/json",
+            producer="finite-artifact-integrity-drill",
+            parents=(parent.artifact_id,),
+            sensitivity=Sensitivity.INTERNAL,
+            created_at_ms=2_000,
+            fresh_until_ms=10_000,
+        )
+        provenance = ArtifactProvenance.create(
+            artifact_id=child.artifact_id,
+            run_id="finite-artifact-integrity-drill-v1",
+            task_id="derive-preview",
+            attempt=1,
+            producer_event_digest=content_digest(
+                {"event": "task.completed", "task_id": "derive-preview", "attempt": 1}
+            ),
+            transformation_digest=transformation_digest(
+                revision="finite-artifact-drill/v1",
+                parameters={"simulation_only": True},
+            ),
+            input_artifact_ids=child.parents,
+        )
+        first = SQLiteArtifactStore(database)
+        parent_inserted = first.put(parent)
+        child_inserted = first.put(child, provenance=provenance)
+
+        restarted = SQLiteArtifactStore(database)
+        restart_payload_verified = restarted.get(child.artifact_id) == child
+        restart_provenance_verified = restarted.provenance(child.artifact_id) == provenance
+        duplicate_inserted = restarted.put(child, provenance=provenance)
+        before = restarted.verify_all()
+
+        connection = sqlite3.connect(database)
+        try:
+            connection.execute(
+                "UPDATE artifacts SET payload = ? WHERE artifact_id = ?",
+                (b'{"tampered":true}', child.artifact_id),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        tamper_get_rejected = False
+        try:
+            restarted.get(child.artifact_id)
+        except ArtifactIntegrityError:
+            tamper_get_rejected = True
+        after = restarted.verify_all()
+
+    return {
+        "schema_version": "finite-artifact-integrity-drill/v1",
+        "measurement_kind": "temporary-local-sqlite-restart-and-tamper-proof",
+        "external_storage_called": False,
+        "live_provider_calls": False,
+        "external_effects_possible": False,
+        "temporary_local_write": True,
+        "parent_inserted": parent_inserted,
+        "child_inserted": child_inserted,
+        "restart_payload_verified": restart_payload_verified,
+        "restart_provenance_verified": restart_provenance_verified,
+        "restart_duplicate_inserted": duplicate_inserted,
+        "pre_tamper": {
+            "passed": before.passed,
+            "artifact_count": before.artifact_count,
+            "provenance_count": before.provenance_count,
+            "verification_digest": before.verification_digest,
+            "digest_verified": before.verify_digest(),
+        },
+        "post_tamper": {
+            "passed": after.passed,
+            "failure_count": len(after.failures),
+            "verification_digest": after.verification_digest,
+            "digest_verified": after.verify_digest(),
+            "direct_read_rejected": tamper_get_rejected,
+        },
+        "proof_passed": (
+            parent_inserted
+            and child_inserted
+            and restart_payload_verified
+            and restart_provenance_verified
+            and duplicate_inserted is False
+            and before.passed
+            and before.verify_digest()
+            and not after.passed
+            and after.verify_digest()
+            and tamper_get_rejected
+        ),
+    }
+
+
 def build_server() -> Any:
     """Build a FastMCP v1 server while keeping MCP optional for core-library users."""
 
@@ -640,12 +1112,18 @@ def build_server() -> Any:
     server = FastMCP(
         "FINITE Agent Physics",
         instructions=(
-            "Use finite_capabilities first. Current tools are deterministic local or simulated "
-            "evidence drills; they do not call live providers or perform external effects."
+            "Use finite_capabilities first. Fixture and evidence tools are local/simulated. "
+            "Only finite_run(mode='granite-probe') may call watsonx, and no tool can commit "
+            "an external effect."
         ),
     )
     server.tool()(finite_capabilities)
     server.tool()(finite_preflight)
+    server.tool()(finite_granite_preflight)
+    server.tool()(finite_run)
+    server.tool()(finite_status)
+    server.tool()(finite_explain_run)
+    server.tool()(finite_verify_run)
     server.tool()(finite_simulate)
     server.tool()(finite_verify)
     server.tool()(finite_registered_faults)
@@ -657,6 +1135,10 @@ def build_server() -> Any:
     server.tool()(finite_quota_corpus)
     server.tool()(finite_replanning_drill)
     server.tool()(finite_decision_explanation_drill)
+    server.tool()(finite_physical_admission_drill)
+    server.tool()(finite_adaptive_recovery_drill)
+    server.tool()(finite_framework_conformance_drill)
+    server.tool()(finite_artifact_integrity_drill)
     return server
 
 

@@ -1,38 +1,45 @@
 # IBM Bob primary-development workstream
 
-The challenge requires IBM Bob to be a core development tool. Architecture assistance or
-code produced elsewhere does not remove that obligation. The participant must perform and
-record real Bob sessions that materially shape the submitted system.
+The challenge requires IBM Bob to be a core development tool. Architecture, code, and tests
+created elsewhere do not remove that obligation. The entrant must perform and record real Bob
+sessions that materially shape the submitted system.
 
-The copy-ready prompts and evidence gates for the remaining work are in
-[`bob-session-runbook.md`](bob-session-runbook.md).
+The current release candidate already contains the kernel, durable runtime, control API, console,
+adapter seam, verifier, and release tooling. Bob work should therefore find and improve real
+remaining risk rather than reimplementing completed components or adding ceremonial line count.
 
-## Bob-owned work packages
+Copy-ready prompts and evidence rules are in [`bob-session-runbook.md`](bob-session-runbook.md).
 
-These packages are intentionally substantial and judge-visible:
+## Bob-owned v5 work packages
 
-1. **B1 - Durable ledger:** implement SQLite event persistence, crash recovery, migrations,
-   and replay tests from the deterministic event schema.
-2. **B2 - Async executor:** convert schedule decisions into cancellable `asyncio` execution
-   with provider semaphores, token buckets, timeouts, and structured retries.
-3. **B3 - IBM adapter:** implement watsonx/Granite planning and synthesis, capture usage, and
-   add a fixture-backed offline fallback.
-4. **B4 - Control plane:** implement the live DAG/Gantt/resource/effect visualization and its
-   adaptation explanation panel.
-5. **B5 - Benchmark laboratory:** implement workload runners, LangGraph baseline, fault
-   injection, raw result capture, and statistical report generation.
-6. **B6 - Hardening:** have Bob analyze scheduler invariants, generate adversarial tests,
-   diagnose failures, and improve documentation from actual test evidence.
+1. **B1 - Adversarial invariant audit.** Find a genuine counterexample in compiler, admission,
+   adaptive recovery, settlement, artifact lineage, or effect authority; add the failing test and
+   the accepted correction.
+2. **B2 - Same-run MCP lifecycle.** Invoke capability, preflight, run, status, explain, and verify
+   through Bob for one exact release-candidate run ID and interpret every evidence label correctly.
+3. **B3 - Live Granite integration review.** Review the bounded watsonx worker, run one real Granite
+   attempt, harden any discovered defect, and preserve a redacted same-run receipt.
+4. **B4 - Accessibility and failure recovery.** Exercise the live console as a keyboard and
+   screen-reader user, trigger a real client/API error, and contribute at least one accepted fix or
+   regression test.
+5. **B5 - Benchmark red-team.** Audit identical-work fingerprints, warmup separation, failures in
+   denominators, interval calculation, framework conversion loss, and PageAgent non-equivalence;
+   repair a real issue or record a defensible negative result.
+6. **B6 - Release audit.** Verify package contents, clean-clone commands, claims, public links,
+   checksums, SBOM/provenance, secrets, and submission artifacts at the exact candidate commit.
 
-## Minimum evidence for each package
+## Minimum evidence for an accepted package
 
-- timestamp and Bob session identifier or screenshot reference;
-- the prompt or task given to Bob;
-- Bob’s plan and the files it created or changed;
+- timestamp, time zone, Bob version, and session/screenshot reference;
+- starting branch and commit;
+- exact prompt and Bob's plan;
+- files Bob created or changed and why;
+- the defect, counterexample, or meaningful judgment Bob supplied;
 - human corrections and rejected suggestions;
-- tests run and their output;
-- commit SHA containing the accepted work;
-- short explanation of why Bob’s contribution was material.
+- focused and full tests with outcomes;
+- accepted commit SHA;
+- MCP tool/run/digest evidence when applicable; and
+- a concise explanation of why the contribution was substantive.
 
-Do not optimize for line count. Optimize for traceable responsibility across planning,
-implementation, testing, and iteration.
+A session that only reads files, repeats an existing test, or restates this workstream may be logged
+honestly but does not satisfy the core-development requirement.

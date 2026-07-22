@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -142,9 +143,7 @@ def test_global_and_provider_semaphores_bound_real_async_calls(tmp_path: Path) -
     assert max_global == 2
     assert max_provider["fixture-a"] == 1
     assert max_provider["fixture-b"] <= 2
-    completion = next(
-        event for event in result.events if event.event_id == "parallel:a1:completed"
-    )
+    completion = next(event for event in result.events if event.event_id == "parallel:a1:completed")
     assert completion.usage.estimated.tokens == 150
     assert completion.usage.reserved.tokens == 150
     assert completion.usage.actual.tokens == 80
@@ -172,6 +171,32 @@ def test_adaptive_admission_refuses_infeasible_run_before_any_call(tmp_path: Pat
     assert calls == 0
     with pytest.raises(RunNotFound):
         store.get_run("infeasible")
+
+
+def test_physical_admission_refuses_before_run_creation_or_worker_call(tmp_path: Path) -> None:
+    profile = replace(_profile(), cpu_time_ms=10)
+    graph = ExecutionGraph.from_tasks((TaskContract("physical", (profile,)),))
+    calls = 0
+
+    async def worker(_context: TaskExecutionContext) -> WorkerResult:
+        nonlocal calls
+        calls += 1
+        return WorkerResult({"unexpected": True})
+
+    store = SQLiteRunStore(tmp_path / "runs.db")
+    executor = AsyncGraphExecutor(store, workers={"physical": worker})
+    with pytest.raises(AdmissionRefused, match="physical-resource admission"):
+        asyncio.run(
+            executor.execute(
+                graph,
+                replace(_envelope(), max_cpu_time_ms=9),
+                run_id="physical-refusal",
+            )
+        )
+
+    assert calls == 0
+    with pytest.raises(RunNotFound):
+        store.get_run("physical-refusal")
 
 
 def test_retry_worst_case_must_fit_before_any_call(tmp_path: Path) -> None:
@@ -259,9 +284,7 @@ def test_worker_receives_the_profile_selected_by_adaptive_admission(tmp_path: Pa
         ).execute(graph, _envelope(), run_id="selected-profile")
     )
     assert observed == [("fixture-b", "economical")]
-    started = next(
-        event for event in result.events if event.event_type == "task.attempt_started"
-    )
+    started = next(event for event in result.events if event.event_type == "task.attempt_started")
     assert started.payload == {"backend": "economical", "provider": "fixture-b"}
 
 
@@ -362,9 +385,7 @@ def test_bounded_retries_happen_between_nonoverlapping_calls(tmp_path: Path) -> 
         if event.task_id == "flaky" and event.event_type == "task.attempt_started"
     ]
     assert attempts == [1, 2, 3]
-    assert len(
-        [event for event in result.events if event.event_type == "task.attempt_failed"]
-    ) == 2
+    assert len([event for event in result.events if event.event_type == "task.attempt_failed"]) == 2
     succeeded = next(
         event for event in result.events if event.event_type == "task.attempt_succeeded"
     )
@@ -402,9 +423,7 @@ def test_absolute_task_deadline_cancels_call_without_retry(tmp_path: Path) -> No
     assert calls == 1
     assert not external_cancellation.is_set()
     events = store.events("deadline")
-    assert len(
-        [event for event in events if event.event_type == "task.attempt_started"]
-    ) == 1
+    assert len([event for event in events if event.event_type == "task.attempt_started"]) == 1
     failed = next(event for event in events if event.event_type == "task.attempt_failed")
     assert failed.payload["error_type"] == "DeadlineExceeded"
 
@@ -460,6 +479,7 @@ def test_output_validator_is_a_nonretryable_completion_gate(tmp_path: Path) -> N
         )
 
     store = SQLiteRunStore(tmp_path / "runs.db")
+
     async def validator(_task: TaskContract, output: object) -> bool:
         return output == {"required_field": True}
 
@@ -474,9 +494,7 @@ def test_output_validator_is_a_nonretryable_completion_gate(tmp_path: Path) -> N
 
     events = store.events("validation")
     assert not store.completed_tasks("validation")
-    assert len(
-        [event for event in events if event.event_type == "task.attempt_started"]
-    ) == 1
+    assert len([event for event in events if event.event_type == "task.attempt_started"]) == 1
     failed = next(event for event in events if event.event_type == "task.attempt_failed")
     assert failed.usage.actual.tokens == 9
     assert failed.payload["retryable"] is False
@@ -637,13 +655,16 @@ def test_crash_restart_skips_completed_task_and_resumes_open_attempt(tmp_path: P
     first_events = first_store.events("restart")
     assert first_store.completed_tasks("restart")["a"].output == {"value": 7}
     assert not any(event.event_type == "run.failed" for event in first_events)
-    assert len(
-        [
-            event
-            for event in first_events
-            if event.task_id == "b" and event.event_type == "task.attempt_started"
-        ]
-    ) == 1
+    assert (
+        len(
+            [
+                event
+                for event in first_events
+                if event.task_id == "b" and event.event_type == "task.attempt_started"
+            ]
+        )
+        == 1
+    )
 
     incompatible = AsyncGraphExecutor(
         SQLiteRunStore(database),

@@ -1,35 +1,74 @@
 import asyncio
 
+import pytest
+
 from agent_physics.mcp_server import (
+    finite_adaptive_recovery_drill,
+    finite_artifact_integrity_drill,
     finite_capabilities,
     finite_context_drill,
     finite_decision_explanation_drill,
     finite_effect_drill,
     finite_executor_drill,
+    finite_explain_run,
     finite_fault_experiment,
+    finite_framework_conformance_drill,
+    finite_physical_admission_drill,
     finite_preflight,
+    finite_run,
+    finite_status,
     finite_quota_corpus,
     finite_registered_faults,
     finite_replanning_drill,
     finite_simulate,
     finite_stormshift_validate,
     finite_verify,
+    finite_verify_run,
 )
 
 
-def test_mcp_capability_statement_is_explicitly_simulated() -> None:
+def test_mcp_capability_statement_is_explicit_about_live_boundary() -> None:
     payload = finite_capabilities()
-    assert payload["stage"] == "deterministic-simulation"
-    assert payload["tool_count"] == 13
+    assert payload["stage"] == "durable-local-and-live-ready"
+    assert payload["tool_count"] == 22
     assert len(payload["tools"]) == payload["tool_count"]
     assert len(set(payload["tools"])) == payload["tool_count"]
     assert payload["boundaries"] == {
         "external_effects_possible": False,
-        "live_provider_calls": False,
+        "default_live_provider_calls": False,
+        "explicit_live_provider_mode_available": True,
+        "live_provider_evidence_captured": False,
         "reasoning_access": False,
-        "safety": "All current scenario backends and effects are simulated.",
+        "physical_resource_evidence": "declared-estimates-not-runtime-measurement",
+        "langgraph_witness": "conditional-on-reviewed-pinned-dependencies",
+        "alibaba_pageagent_integration": False,
+        "beeai_support": False,
+        "safety": (
+            "Fixture backends and all effects are simulated. Granite mode is an explicit "
+            "provider call and still cannot commit an external effect."
+        ),
     }
-    assert "live IBM Granite or watsonx execution" in payload["not_implemented"]
+    assert (
+        "entrant-owned genuine Bob and live-watsonx evidence capture" in payload["not_implemented"]
+    )
+    assert "physical-runtime measurement" in payload["not_implemented"]
+    assert "Alibaba PageAgent integration or BeeAI adapter support" in payload["not_implemented"]
+
+
+def test_mcp_durable_fixture_lifecycle_uses_one_persistent_run(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FINITE_STATE_DIR", str(tmp_path / "finite-state"))
+
+    started = asyncio.run(finite_run("mcp-lifecycle-1"))
+    status = finite_status("mcp-lifecycle-1")
+    explanation = finite_explain_run("mcp-lifecycle-1")
+    verification = finite_verify_run("mcp-lifecycle-1")
+
+    assert started["state"] == "awaiting_effects"
+    assert status["event_digest"] == explanation["event_digest"]
+    assert status["mode"] == "fixture"
+    assert verification["passed"] is True
 
 
 def test_mcp_preflight_can_refuse_without_calling_external_systems() -> None:
@@ -96,7 +135,7 @@ def test_executor_drill_resumes_all_completed_work_and_only_proposes_effect() ->
     assert result["external_effects_possible"] is False
     assert result["external_calls_made"] is False
     assert result["model_calls_made"] is False
-    assert result["validator_kind"] == "deterministic_structural_only"
+    assert result["validator_kind"] == "deterministic_structural_plus_bounded_semantic"
     assert result["task_count"] == 11
     assert result["resumed_task_count"] == 11
     assert result["first_run_state"] == "awaiting_effects"
@@ -117,9 +156,7 @@ def test_quota_corpus_replays_declared_limits_without_a_provider_call() -> None:
     assert first["measurement_kind"] == "deterministic-local-quota-model"
     assert first["live_provider_calls"] is False
     assert first["provider_quota_measurement"] is False
-    assert first["aggregate_guard_scope"] == (
-        "per_instance_only_not_process_global_or_distributed"
-    )
+    assert first["aggregate_guard_scope"] == ("per_instance_only_not_process_global_or_distributed")
     assert first["replay_valid"] is True
     assert first["logical_calls"] == 200
     assert first["admission_requests"] > first["logical_calls"]
@@ -182,3 +219,97 @@ def test_decision_explanation_drill_covers_nominal_degraded_and_refused_modes() 
     assert refused["records_included"] is True
     assert len(refused["records"]) == refused["record_count"]
     assert all(record["reasoning_access"] is False for record in refused["records"])
+
+
+def test_physical_admission_drill_proves_exact_boundary_and_one_unit_refusal() -> None:
+    result = finite_physical_admission_drill()
+    admitted = result["exact_cap_witness"]
+    refused = result["one_cpu_ms_tighter_witness"]
+
+    assert result["measurement_kind"] == "declared-nonzero-integer-estimates"
+    assert result["runtime_measurement_performed"] is False
+    assert result["energy_measurement_supported"] is False
+    assert result["live_provider_calls"] is False
+    assert result["all_declared_estimates_nonzero"] is True
+    assert result["boundary_proof_passed"] is True
+    assert admitted["status"] == "admitted"
+    assert refused["status"] == "refused"
+    assert admitted["report_digest"]
+    assert refused["report_digest"]
+    assert all(value > 0 for value in admitted["totals"].values())
+    violations = [check for check in refused["checks"] if not check["passed"]]
+    assert [check["dimension"] for check in violations] == ["cpu_time"]
+    assert violations[0]["observed"] == 41
+    assert violations[0]["limit"] == 40
+
+
+def test_adaptive_recovery_drill_executes_crash_restart_and_call_free_replay() -> None:
+    result = finite_adaptive_recovery_drill()
+
+    assert result["measurement_kind"] == "deterministic-local-durable-crash-recovery"
+    assert result["proof_passed"] is True
+    assert result["final_status"] == "completed"
+    assert result["control_digest"] == result["replay_control_digest"]
+    assert result["replay_passed"] is True
+    assert result["first_process_worker_calls"] == ("intake", "assessment")
+    assert result["restart_worker_calls"] == ("mandatory_alert",)
+    assert result["unknown_task_ids"] == ("optional_enrichment",)
+    assert result["shed_task_ids"] == ("optional_enrichment", "optional_social")
+    assert result["provider_reset_honored"] is True
+    assert result["controller_record_count"] == 14
+    assert result["external_provider_calls"] == 0
+    assert result["external_effects_possible"] is False
+
+
+def test_framework_conformance_drill_is_actual_pinned_evidence_or_honest_unavailability() -> None:
+    result = asyncio.run(finite_framework_conformance_drill())
+
+    assert result["live_provider_calls"] is False
+    assert result["external_calls_made"] is False
+    assert result["external_effects_possible"] is False
+    assert result["alibaba_pageagent_exercised"] is False
+    assert result["beeai_exercised"] is False
+    if result["status"] == "unavailable":
+        assert result["verified"] is False
+        assert result["actual_framework_execution"] is False
+        assert "install" in result["reason"]
+    else:
+        assert result["status"] == "passed"
+        assert result["verified"] is True
+        assert result["actual_framework_execution"] is True
+        witness = result["witness"]
+        assert witness["pinned_versions_match"] is True
+        assert witness["all_tasks_executed_once"] is True
+        assert witness["dependencies_preserved"] is True
+        assert witness["checkpoint_receipt_verified"] is True
+        assert witness["effects_proposal_only"] is True
+        assert witness["model_calls_made"] is False
+        assert witness["external_calls_made"] is False
+        assert witness["external_effects_executed"] == 0
+        assert "loss:langgraph:run-budgets" in witness["semantic_loss_ids"]
+
+
+def test_artifact_integrity_drill_restarts_deduplicates_and_detects_tampering() -> None:
+    result = finite_artifact_integrity_drill()
+
+    assert result["measurement_kind"] == "temporary-local-sqlite-restart-and-tamper-proof"
+    assert result["external_storage_called"] is False
+    assert result["live_provider_calls"] is False
+    assert result["external_effects_possible"] is False
+    assert result["proof_passed"] is True
+    assert result["parent_inserted"] is True
+    assert result["child_inserted"] is True
+    assert result["restart_payload_verified"] is True
+    assert result["restart_provenance_verified"] is True
+    assert result["restart_duplicate_inserted"] is False
+    assert result["pre_tamper"] == {
+        **result["pre_tamper"],
+        "passed": True,
+        "artifact_count": 2,
+        "provenance_count": 1,
+        "digest_verified": True,
+    }
+    assert result["post_tamper"]["passed"] is False
+    assert result["post_tamper"]["failure_count"] >= 1
+    assert result["post_tamper"]["digest_verified"] is True
+    assert result["post_tamper"]["direct_read_rejected"] is True

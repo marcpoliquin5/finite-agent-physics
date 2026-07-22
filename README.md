@@ -1,104 +1,140 @@
-# Agent Physics / FINITE
+# FINITE / Agent Physics
 
-![FINITE — Keep the promises. Change the plan.](apps/physics-console/public/og.png)
-
-**FINITE is the SLO runtime for AI agents. Agent Physics is the execution science behind it.**
-
-Agent frameworks are good at expressing *what may happen next*. FINITE is an
-experimental, framework-neutral runtime for deciding *what should run where and when*
-when time, tokens, money, context, provider capacity, reliability, and real-world side
-effects are finite.
-
-> It does not beat physical limits. It makes them first-class scheduling constraints.
-
-This repository is being developed for the July 2026 **AI Builders Challenge with IBM
-Bob**, Wildcard theme: *Build Intelligent Systems for the Future of Work*.
-
-## Problem statement
-
-Agent frameworks can express dependencies and hand work to models or tools, but a graph does
-not make deadline, provider capacity, token, cost, context, reliability, retry, and real-world
-effect limits disappear. Under pressure, a workflow can finish late, silently weaken required
-work, overspend, amplify a provider failure, or repeat an unsafe action.
-
-## Solution
-
-FINITE adds a framework-neutral control plane around agent work. It compiles required promises
-into typed contracts, preflights them against a finite execution envelope, selects an admissible
-plan, refuses impossible runs before dispatch, accounts for actual use, persists restart state,
-and turns declared writes into reviewable effect intents. The deterministic evidence surface is
-called **Agent Physics** because it measures what a plan can and cannot promise under explicit
-constraints.
-
-## The category-defining idea
+![FINITE - Keep the promises. Change the plan.](apps/physics-console/public/og-v5.png)
 
 > Agents can reason. FINITE makes them keep promises.
 
-Every real execution has a theoretical lower bound:
+FINITE is an experimental, framework-neutral SLO runtime for agent workflows. Agent Physics is
+the execution science underneath it: a deterministic control layer that decides what may run,
+where, and when when time, tokens, money, context, provider capacity, physical resources,
+reliability, and real-world effects are finite.
+
+This repository is a **v5 release candidate**, not a stable `v5.0.0` release. The stable tag is
+fail-closed behind the [v5 release contract](docs/V5_RELEASE_CONTRACT.md): genuine IBM Bob and
+live Granite evidence, public release and judge access, human eligibility, SkillsBuild, video,
+and submission receipts must exist at one immutable commit. Local tests or polished UI cannot
+substitute for those external facts.
+
+The project is being developed for the July 2026 **AI Builders Challenge with IBM Bob**, Wildcard
+theme: *Build Intelligent Systems for the Future of Work*.
+
+## Why this exists
+
+Graph libraries express what may happen next. They do not make deadlines, provider queues,
+token and cost ceilings, context movement, machine capacity, retries, or consequential actions
+disappear. Under pressure, a workflow can finish late, silently weaken required work, overspend,
+amplify a provider failure, or repeat an unsafe write.
+
+FINITE compiles promises into typed contracts, preflights them against a finite execution
+envelope, refuses impossible work before dispatch, accounts for actual use, changes the residual
+plan without erasing settled history, and turns declared writes into durable reviewable intents.
 
 ```text
-runtime >= max(critical-path latency, total work / available capacity, required network RTT)
+runtime >= max(critical-path latency, total work / available capacity, required transport + RTT)
 ```
 
-The current simulator reports a separate **planning-model bound** computed from selected
-p95 profile estimates. That is a consistency check for the deterministic model, not a claim
-about physical runtime. Most orchestration diagrams also omit provider queues, token and
-cost budgets, context movement, tail latency, retries, write conflicts, and the fact that
-some actions cannot safely be repeated. Agent Physics puts those constraints into an
-**execution envelope**, then continuously accounts for them.
+The runtime reports separately named planning and physical lower bounds. Profile values are
+declared estimates, not hardware telemetry. Energy remains explicitly unsupported until measured.
 
-The target architecture has seven cooperating planes; the
-[acceptance audit](docs/capability-status.md) distinguishes implemented, partial, and future
-behavior:
-
-1. **Intent compiler** - turns goals into typed task and effect contracts.
-2. **Constraint solver** - admits, rejects, or degrades plans before they overspend.
-3. **Adaptive scheduler** - currently routes profiles, protects mandatory work, and sheds
-   optional work; topology switching and speculation remain target capabilities.
-4. **Context fabric** - moves content-addressed artifacts instead of rebroadcasting transcripts.
-5. **Effect kernel** - protects irreversible actions with capabilities, idempotency, and approval.
-6. **Evidence ledger** - records causal events, resource use, policy decisions, and provenance.
-7. **Control plane** - makes the critical path, resource pressure, and adaptation visible.
+## Architecture
 
 ```mermaid
 flowchart LR
-    Bob["IBM Bob"] --> MCP["13-tool MCP seam"]
-    Frameworks["Framework adapters (target)"] --> Contracts["Typed promises"]
-    MCP --> Contracts
-    Contracts --> Admit{"Conservative admission"}
-    Admit -->|"refuse before dispatch"| Evidence["Digest-bound evidence"]
+    Bob["IBM Bob"] --> MCP["22-tool MCP seam"]
+    Clients["Frameworks and API clients"] --> Compiler["Typed workflow compiler"]
+    MCP --> Compiler
+    Compiler --> Admit{"Logical + physical admission"}
+    Admit -->|"refuse before dispatch"| Evidence["Sealed evidence"]
     Admit -->|"admit / degrade"| Runtime["Adaptive runtime"]
-    Runtime --> Context["Context fabric"]
-    Runtime --> Workers["Model / tool adapters"]
+    Runtime <--> Governor["Quota + resource governor"]
+    Runtime <--> Context["Artifact + context fabric"]
+    Runtime --> Adapters["Capability-checked adapters"]
     Runtime --> Effects["Effect intent kernel"]
+    Adapters --> Safety["Semantic safety gates"]
     Context --> Evidence
-    Workers --> Evidence
     Effects --> Evidence
-    Evidence --> Console["Physics Console"]
+    Safety --> Evidence
+    Evidence --> Verify["Independent replay + verifier"]
+    Runtime --> API["Authenticated REST + SSE"]
+    API --> Console["Physics Console"]
 ```
 
-## Executable vertical slice
+The ten cooperating planes are:
 
-The initial slice is intentionally deterministic. It lets us validate scheduler mechanics
-before cloud-model variance can hide mistakes.
+1. A strict workflow compiler for canonical Python, JSON, and safe YAML contracts.
+2. Logical and physical admission that rejects impossible runs before worker calls.
+3. An adaptive residual controller that retains settled work, deadlines, use, and effects.
+4. Integer quota and resource accounting with independent conservation replay.
+5. A content-addressed artifact and bounded-context fabric with lineage obligations.
+6. A declared adapter ABI for cancellation, usage, checkpoint, fencing, and effect semantics.
+7. Model-independent semantic safety gates with explicit bounded claims.
+8. A durable effect-intent kernel with approval, fencing, idempotency, and ambiguity recovery.
+9. Append-only evidence, whole-run replay, mutation checks, and release manifests.
+10. Bob MCP, authenticated REST/SSE, and a dual static/live Physics Console.
+
+See the detailed [architecture](docs/architecture.md), [effect kernel](docs/effect-kernel.md), and
+[capability audit](docs/capability-status.md).
+
+## Forty concrete v5 proof points
+
+Everything below is implemented and locally test-backed inside its stated boundary:
+
+1. Strict schema versions and unknown-field rejection.
+2. Duplicate-key rejection for JSON and YAML.
+3. Canonical cross-format workflow digests.
+4. Typed task input/output ports and pre-execution compatibility checks.
+5. Dependency, cycle, missing-producer, and graph-shape validation.
+6. Required and optional work with protected mandatory ancestry.
+7. Conservative deadline, token, cost, context, quality, and reliability admission.
+8. Signed-int64 overflow refusal rather than wraparound.
+9. CPU-time admission in integer CPU-milliseconds.
+10. Conservative peak RAM and VRAM admission.
+11. Storage-read and storage-write byte admission.
+12. Network ingress, egress, bandwidth, RTT, and egress-cost admission.
+13. A separately labeled transport/RTT critical-path lower bound.
+14. An explicit physical-resource coverage and limitations matrix.
+15. Global and per-provider concurrency enforcement.
+16. RPM, TPM, reset-window, bounded-retry, and 429-suppression accounting.
+17. Protected multi-resource cost-to-go for mandatory work.
+18. Optional-work shedding when headroom disappears.
+19. Runtime residual replanning after capacity, failure, settlement, and envelope events.
+20. Durable revision and decision digests for every replan.
+21. Absolute deadlines, bounded retries, cooperative cancellation, and visible uncooperative work.
+22. Manifest-bound SQLite resume without recalling completed fixture work.
+23. Durable content-addressed artifact put/get/dedup with lineage checks.
+24. All-or-refuse context packing under byte and token caps.
+25. Explicit freshness, contradiction, evidence, and hostile-context handling.
+26. Declared adapter capabilities with structured semantic-loss reporting.
+27. An optional bounded watsonx.ai/Granite executor adapter with redacted receipts.
+28. A structural and semantic-safety pipeline for the fictional StormShift workload.
+29. Declared writes diverted from workers into durable proposed effect intents.
+30. Exact-scope, time-bound approval grants for high-risk simulated effects.
+31. Transactional outbox, idempotency, fencing, crash ambiguity, and compensation drills.
+32. Append-only causal run events with public-fact decision explanations.
+33. A no-provider-call whole-run verifier that consumes sealed evidence.
+34. Mutation rejection across resource, artifact, context, approval, effect, and manifest identities.
+35. A real pinned LangGraph conformance witness plus an explicit conversion-loss ledger.
+36. A preregistered paired deterministic fault laboratory with raw records and intervals.
+37. Twenty-two Bob-callable MCP tools tested through a real STDIO handshake.
+38. Typed submit, status, inspect, cancel, approve, and resumable event-stream HTTP routes.
+39. A live-capable console that keeps bearer credentials in memory and distinguishes static evidence.
+40. Deterministic release-candidate checksums, SBOM, provenance, package inspection, and offline verification.
+
+These are not claims of universal superiority, production readiness, live Granite success, or
+deployment by Miami-Dade County. The exact limits are maintained in [limitations](docs/limitations.md).
+
+## Quick start
+
+Python 3.11 or later is required.
 
 ```powershell
-python -m pip install -e ".[dev]"
-agent-physics demo --policy adaptive
-agent-physics demo --policy sequential
-python scripts/export_console_artifact.py
-agent-physics judge-bundle
+python -m pip install -e ".[dev,api]"
 python -m pytest
+agent-physics demo --policy adaptive
+finite-api
 ```
 
-The optional external comparator has its own pinned install and evidence path:
-
-```powershell
-python -m pip install -e ".[langgraph]"
-agent-physics langgraph-baseline --output artifacts/langgraph-baseline.json
-```
-
-The local Physics Console has its own locked toolchain:
+In a second terminal, inspect the local service or connect the Physics Console:
 
 ```powershell
 cd apps/physics-console
@@ -107,99 +143,94 @@ npm test
 npm run dev
 ```
 
-It currently demonstrates:
+The console accepts an exact API origin and an optional bearer token in memory. The committed
+artifact is a sealed deterministic replay; submitting the bundled `stormshift` reference workflow
+uses the configured local service and streams its durable events over SSE.
 
-- typed task, backend, resource, and side-effect contracts;
-- a strict versioned workflow IR whose Python, JSON, and safe-YAML forms compile to the same
-  canonical digest and reject unknown or duplicate fields;
-- dependency and cycle validation;
-- critical-path priority calculation;
-- deadline-, quality-, reliability-, token-, cost-, and context-aware backend selection;
-- global and per-provider concurrency limits;
-- serialization of conflicting writes;
-- schema-level approval-gate and idempotency requirements for irreversible effects;
-- optional-work shedding under constrained envelopes;
-- protected multi-resource cost-to-go for mandatory work;
-- deterministic simulation events, cancellation settlement, and fail-closed trace verification;
-- an independently replayed 10,000-transition integer resource-ledger stress corpus covering
-  reservations, settlements, refunds, cap refusal, overrun refusal, and identity conflict;
-- a reset-aware local quota model covering declared RPM, TPM, concurrency, bounded retries,
-  deadlines, settlement, and 429 suppression across a seeded 1,200-call corpus;
-- digest-bound residual-graph replanning that retains elapsed time, settled usage, completed
-  work, and effect boundaries across typed capacity/failure/envelope events;
-- one structured numeric explanation record for every scheduler event, derived only from
-  public graph/envelope/trace facts and explicitly excluding hidden chain-of-thought;
-- immutable evidence artifacts, freshness/conflict assessment, and all-or-refuse context obligations;
-- a SQLite effect-intent/outbox state machine with scoped approval grants, fencing, idempotency,
-  crash ambiguity, and compensation against a simulation-only target;
-- a fixture-only async executor with conservative admission, bounded retries and concurrency,
-  absolute deadlines, cancellation, reported-use enforcement, manifest-bound resume, and an
-  explicit `awaiting_effects` terminal boundary;
-- a migration-tested append-only SQLite run ledger with completion-provenance invariants;
-- a typed fictional StormShift workload with digest-bound structural validation and explicit
-  limitations;
-- a complete 450-record deterministic experiment design with one nominal control, four fault
-  transformations, 30 paired seeds, per-seed deltas, Wilson intervals, and paired bootstrap
-  intervals;
-- a pinned real-LangGraph nominal conformance comparator that runs the same fixture workers,
-  verifies joins/checkpoints/caps, exports a self-digested record, and makes no performance claim;
-- a Bob-compatible STDIO MCP server verified through a real protocol handshake;
-- an optional watsonx.ai adapter that records live-labeled, redacted inference receipts;
-- sequential and static-parallel development-reference policies;
-- a digest-bound Physics Console whose 1,080 pressure states are generated by the Python kernel,
-  not reimplemented in browser logic;
-- one canonical judge bundle that seals feasible/refused preflights, conservation reports,
-  StormShift adversarial checks, durable restart evidence, all 450 experiment records, console
-  verification, revision provenance, and explicit limitations under one content digest.
+Useful local evidence commands:
 
-No performance claim is considered valid until it is reproduced by the benchmark suite.
-See [the claim boundary](docs/claims-and-prior-art.md), [known limitations](docs/limitations.md),
-[the 62-capability engineering program and eight integrated release proofs](PROGRAM.md), and its
-[acceptance audit](docs/capability-status.md). The dated
-[competitive landscape](docs/competitive-landscape.md) separates orchestration libraries,
-agent platforms, and browser agents; it records the live PageAgent/LangChain comparison and the
-release gaps FINITE must close without pretending stars are technical evidence.
+```powershell
+agent-physics demo --policy sequential
+agent-physics judge-bundle
+agent-physics fair-benchmark --output artifacts/fair-benchmark
+python scripts/export_console_artifact.py
+python scripts/generate_release_candidate.py --help
+python scripts/verify_release_candidate.py --help
+```
 
-## Designed with Bob, callable by Bob
+The optional external comparator and IBM adapter are isolated extras:
 
-IBM Bob’s July 2026 release already includes a shared agent harness, parallel execution,
-subagents, workflow orchestration, model routing, approvals, and usage analytics. FINITE does
-not imitate those capabilities. It is being built as a constraint-verification and runtime
-control extension that Bob can call through 13 MCP tools: preflight and inspect schedules,
-verify invariants, execute and resume trusted fixtures, validate StormShift structure, replay
-declared quota pressure, exercise modeled replanning, derive public-fact explanations, and run
-the registered deterministic experiment. See
-[the IBM/Bob product boundary](docs/ibm-bob-fit.md).
+```powershell
+python -m pip install -e ".[langgraph]"
+agent-physics langgraph-baseline --output artifacts/langgraph-baseline.json
 
-## Demonstration: Miami EOC pressure test
+python -m pip install -e ".[watsonx]"
+python -c "from agent_physics.bob_lifecycle import default_bob_run_service; print(default_bob_run_service().granite_preflight())"
+```
 
-The first scenario simulates an emergency-operations team assembling shelter, transit,
-flood, hospital, utility, and multilingual alert information under a hard deadline. The
-final public alert is declared as an irreversible effect, so the graph must declare an
-approval gate and idempotency key. The simulator never performs that effect. Every backend
-in the current scenario is explicitly labeled simulated or fixture-backed; live IBM Granite
-inference will be a separate presentation and evaluation path.
+## Bob is a requirement, not a logo
 
-## IBM Bob requirement
+FINITE exposes 22 local STDIO MCP tools for capability discovery; preflight, run, status,
+explanation, and verification; deterministic simulation; quota, context, effect, replanning,
+physical-admission, framework-conformance, adaptive-recovery, and artifact-integrity drills; and
+bounded Granite readiness. See the [Bob MCP guide](docs/bob-mcp.md) and
+[session runbook](docs/bob-session-runbook.md).
 
-IBM Bob must be a core development tool for the challenge entry. This repository therefore
-keeps an explicit, auditable [Bob workstream](docs/bob-workstream.md) and
-[session runbook](docs/bob-session-runbook.md), plus a
-[build log](docs/bob-build-log.md). Entries must describe real Bob sessions; they must never
-be backfilled or fabricated. IBM Granite/watsonx is planned as a runtime backend, but that
-does not replace the requirement to use Bob substantially during development.
+The committed [Bob build log](docs/bob-build-log.md) must contain only real entrant-owned Bob
+sessions. It is intentionally not backfilled from Codex work. Stable v5 remains blocked until a
+genuine Bob session materially contributes to planning, coding, or testing and invokes the FINITE
+lifecycle against the same release commit.
 
-**Current gate:** the Bob build log is intentionally empty until the entrant performs real Bob
-planning, coding, testing, and MCP sessions. The repository does not present Codex work as Bob
-work. This requirement is incomplete until genuine evidence is added.
+## Granite / watsonx.ai boundary
 
-## Status
+The optional adapter calls IBM `ModelInference` with SDK retries disabled so FINITE owns attempt
+accounting. It records a redacted receipt with model ID, measured latency, provider-reported usage
+when present, and request/output digests. Tests use an injected fake inference client and do not
+count as IBM evidence. See the [watsonx adapter guide](docs/watsonx-adapter.md).
 
-Alpha vertical slice. The simulator, feasibility certificates, conservation verifier,
-artifact/context subsystem, effect kernel, durable fixture executor, StormShift validator,
-registered deterministic experiment, pinned nominal LangGraph comparator, Bob MCP seam, and
-local/private Physics Console are implemented and tested. Live Granite evidence, genuine Bob
-provenance, a tuned faulted external-framework benchmark, public GitHub publication, SkillsBuild
-completion, and the three-minute
-submission video remain release blockers. Track them in the
-[submission checklist](docs/submission-checklist.md) and [roadmap](ROADMAP.md).
+## Comparison with PageAgent and LangChain
+
+FINITE does not compete with PageAgent on DOM-native browser action or with LangChain on its
+integration ecosystem. It targets a different layer: admission, resource physics, adaptive
+control, effect authority, and independently verifiable evidence around authored workflows.
+
+The dated [competitive landscape](docs/competitive-landscape.md) compares 16 leading public
+repositories using primary GitHub sources, including Alibaba PageAgent, LangChain, LangGraph,
+AutoGen, CrewAI, Dify, Langflow, n8n, Agno, and others. It records what each project proves,
+where FINITE is differentiated, and 45 gaps that must not be hidden behind star counts.
+
+## Current evidence and release state
+
+Local evidence already includes the Python suite, core coverage above the v5 threshold, a real MCP
+protocol handshake, a live local HTTP/SSE end-to-end run, console build/lint/render tests, and a
+zero-vulnerability `npm audit` at verification time. The exact final counts and hashes belong in
+the generated release-candidate report rather than hand-maintained marketing prose.
+
+The Physics Console is deployed at
+[finite-agent-physics.marcpoliquin5.chatgpt.site](https://finite-agent-physics.marcpoliquin5.chatgpt.site),
+currently with owner-only access. It is not yet an anonymous judge URL.
+
+Stable `v5.0.0` is still blocked by:
+
+- genuine, timestamped IBM Bob build and MCP lifecycle evidence;
+- a real live-Granite/watsonx run and redacted provider receipt;
+- authenticated public GitHub publication and an immutable release tag;
+- anonymous or explicitly judge-shared deployment access and signed-out verification;
+- entrant eligibility, event registration, and IBM SkillsBuild evidence;
+- a captioned public video of no more than three minutes; and
+- final project-page publication and submission receipts.
+
+Track the exact handoff in the [submission checklist](docs/submission-checklist.md),
+[submission draft](docs/submission-draft.md), and [three-minute demo script](docs/demo-script.md).
+
+## Safety boundary
+
+StormShift is fictional. No code in the demo publishes an emergency alert or contacts Miami-Dade,
+an emergency service, or any public audience. High-risk writes stop at a proposed intent unless a
+separately configured simulation target receives an exact approval. Do not connect the release
+candidate to a real consequential system without a new threat model, production IAM, isolation,
+retention policy, operational review, and target-side idempotency evidence.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
