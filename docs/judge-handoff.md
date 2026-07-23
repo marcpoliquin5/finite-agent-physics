@@ -16,11 +16,11 @@ capability disposition is in the
 |---|---|---|
 | Typed workflow and adapters | Workflow v2 typed-port tests and pre-dispatch adapter-ABI rejection tests | Local contracts and trusted adapter declarations |
 | Refusal before spend | Logical admission, quota, and physical-resource tests assert zero worker/provider calls | Declared estimates and local fixtures |
-| Adaptive recovery | Integrated 429/reset, budget-cut, crash/restart, unknown-use, and call-free replay drill | Caller-supplied events; no live provider telemetry |
+| Adaptive recovery | Revision-fenced pause/resume, 429/reset, budget-cut, crash/restart, unknown-use, and call-free replay drill | Authenticated local controls and caller-supplied events; no live provider telemetry |
 | Durable evidence | Restart-safe artifact deduplication/provenance plus an independent whole-run mutation verifier | SQLite and SHA-256 are local durability/integrity boundaries, not identity signatures |
 | Semantic safety | Controlled citation, bilingual fact, freshness, URL, taint/authority, and static accessibility checks; the registered adversarial corpus is refused | Bounded grammar/declarations, not general entailment, translation quality, or rendered WCAG proof |
 | IBM integration seam | 22 local MCP tools and durable preflight/run/status/explain/verify lifecycle; watsonx worker has fake-inference integration tests | No genuine Bob session and no captured live-watsonx receipt yet |
-| Product surface | Bearer-protected local REST/SSE and a sealed/live-aware console | No public API; current Sites access is owner-only |
+| Product surface | Bearer-protected local REST/SSE/adaptive controls and a sealed/live-aware console; desktop/mobile browser flow verifies zero-call replay and run-scoped proposed effects | No public API, full assistive-technology audit, or judge path; current Sites access is owner-only |
 | Framework evidence | Exact neutral round trip, explicit LangGraph loss ledger, and conditional pinned LangGraph execution | No BeeAI or PageAgent execution; no universal equivalence or superiority claim |
 
 Current Sites URL:
@@ -103,7 +103,7 @@ candidate label, not stable v5.
 Run from the repository root in a clean environment:
 
 ```powershell
-python -m pip install -e ".[dev,api]"
+python -m pip install -e ".[dev,api,langgraph]"
 python -m ruff check .
 python -m pytest
 python -m agent_physics.cli preflight

@@ -757,7 +757,8 @@ footer div {
   gap: 8px;
 }
 
-.runtime-actions button {
+.runtime-actions button,
+.adaptive-controls button {
   min-height: 40px;
   border: 1px solid;
   padding: 9px 12px;
@@ -780,11 +781,26 @@ footer div {
   color: var(--red);
 }
 
-.runtime-actions button:disabled {
+.runtime-actions button:disabled,
+.adaptive-controls button:disabled {
   border-color: var(--line) !important;
   background: transparent;
   color: var(--quiet);
   cursor: not-allowed;
+}
+
+.adaptive-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 12px;
+}
+
+.adaptive-controls button {
+  border-color: rgba(185, 255, 102, 0.42);
+  background: rgba(185, 255, 102, 0.055);
+  color: var(--acid);
 }
 
 .runtime-connect > p {
@@ -823,6 +839,40 @@ footer div {
   color: var(--acid);
   font-family: var(--font-geist-mono), monospace;
   font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adaptive-receipt {
+  display: grid;
+  grid-template-columns: 0.7fr 0.55fr 1.35fr 1.4fr;
+  border-bottom: 1px solid var(--line);
+  background: rgba(185, 255, 102, 0.025);
+}
+
+.adaptive-receipt > div {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  border-right: 1px solid var(--line-soft);
+  padding: 11px 16px;
+}
+
+.adaptive-receipt > div:last-child { border-right: 0; }
+
+.adaptive-receipt span {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.adaptive-receipt strong {
+  overflow: hidden;
+  color: var(--acid);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1068,9 +1118,13 @@ footer div { flex-wrap: wrap; justify-content: flex-end; gap: 16px; font-family:
   .effect-flow { grid-template-columns: 1fr 1fr; row-gap: 10px; }
   .live-rack > header { align-items: flex-start; flex-direction: column; }
   .runtime-summary { grid-template-columns: 1fr 1fr; }
+  .adaptive-receipt { grid-template-columns: 1fr 1fr; }
+  .adaptive-receipt > div:nth-child(2) { border-right: 0; }
+  .adaptive-receipt > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); }
   .runtime-summary > div:nth-child(2) { border-right: 0; }
   .runtime-summary > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); }
   .runtime-actions { grid-template-columns: 1fr; }
+  .adaptive-controls { grid-template-columns: 1fr; }
   .live-events li { grid-template-columns: 28px minmax(150px, 1fr) minmax(64px, 0.5fr); }
   .effect-stage > i { display: none; }
   .evidence-rack > header { align-items: flex-start; flex-direction: column; }

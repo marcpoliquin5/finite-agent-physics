@@ -68,6 +68,7 @@ def test_runtime_executes_meaningful_fixture_graph_and_stops_before_write(tmp_pa
     assert effect_output == {
         "effect_intent_id": result.effect_intent.intent_id,
         "effect_state": "proposed",
+        "declared_idempotency_key": "demo-incident-001-alert-v1",
         "executed_externally": False,
     }
     assert not any(

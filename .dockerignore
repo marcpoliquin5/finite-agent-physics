@@ -1,0 +1,11 @@
+*
+!LICENSE
+!README.md
+!pyproject.toml
+!requirements/
+!requirements/container.txt
+!src/
+!src/**
+**/__pycache__/
+**/*.egg-info/
+**/*.py[cod]

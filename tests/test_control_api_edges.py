@@ -9,7 +9,7 @@ import pytest
 import agent_physics.control_api as control_api
 from agent_physics.control_api import ControlAPIError, ControlPlane
 from agent_physics.effects import SQLiteEffectBroker
-from agent_physics.executor import AsyncGraphExecutor, ExecutionError
+from agent_physics.executor import AsyncGraphExecutor, ExecutionError, WorkerResult
 from agent_physics.run_store import SQLiteRunStore
 
 
@@ -101,6 +101,10 @@ def _error(payload: dict[str, object]) -> str:
         ({"event_poll_seconds": 0}, "SSE timing"),
         ({"sse_heartbeat_seconds": 0}, "SSE timing"),
         ({"allow_anonymous_status_stream": 1}, "boolean"),
+        ({"max_active_runs": 0}, "max_active_runs"),
+        ({"max_active_runs": True}, "max_active_runs"),
+        ({"max_control_events_per_run": 0}, "max_control_events_per_run"),
+        ({"max_control_events_per_run": 1_000_001}, "max_control_events_per_run"),
         ({"allowed_origins": ["https://a.example"]}, "tuple"),
         ({"allowed_origins": (7,)}, "strings"),
         (
@@ -113,6 +117,8 @@ def _error(payload: dict[str, object]) -> str:
         ),
         ({"bearer_token": 7}, "bearer_token"),
         ({"bearer_token": "x" * 1025}, "bearer_token"),
+        ({"bearer_token": "é" * 32}, "visible ASCII"),
+        ({"bearer_token": "\x7f" * 32}, "visible ASCII"),
     ],
 )
 def test_constructor_rejects_ambiguous_security_configuration(
@@ -122,6 +128,71 @@ def test_constructor_rejects_ambiguous_security_configuration(
 ) -> None:
     with pytest.raises(ValueError, match=match):
         _app(tmp_path, **kwargs)
+
+
+def test_concurrent_control_requests_atomically_reserve_the_durable_limit(
+    tmp_path: Path,
+) -> None:
+    class BlockingRuntime:
+        def __init__(self) -> None:
+            self.store = SQLiteRunStore(tmp_path / "atomic-control-limit.db")
+            self.entered = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def apply_adaptive_control(
+            self,
+            run_id: str,
+            *,
+            kind: str,
+            expected_revision: int,
+            occurred_at_ms: int,
+            details: dict[str, object],
+        ) -> dict[str, object]:
+            del run_id, kind, occurred_at_ms, details
+            self.entered.set()
+            await self.release.wait()
+            return {"state": {"revision": expected_revision + 1}}
+
+    async def scenario() -> None:
+        runtime = BlockingRuntime()
+        runtime.store.get_or_create_run(
+            run_id="bounded-control",
+            graph_digest="graph",
+            envelope={},
+            deadline_at_ms=1_000,
+        )
+        app = ControlPlane(runtime, max_control_events_per_run=1)  # type: ignore[arg-type]
+        first = asyncio.create_task(
+            app.adaptive_control(
+                "bounded-control",
+                kind="provider.capacity",
+                expected_revision=0,
+                occurred_at_ms=0,
+                details={"provider": "local", "capacity": 1},
+            )
+        )
+        await runtime.entered.wait()
+        with pytest.raises(ControlAPIError) as limited:
+            await app.adaptive_control(
+                "bounded-control",
+                kind="budget.cut",
+                expected_revision=1,
+                occurred_at_ms=0,
+                details={"tokens": 1, "cost_microusd": 1, "context_bytes": 1},
+            )
+        assert limited.value.status == 429
+        assert limited.value.code == "control_event_limit"
+        runtime.release.set()
+        assert (await first)["state"] == {"revision": 1}
+        accepted = [
+            event
+            for event in runtime.store.events("bounded-control")
+            if event.event_type == "control.adaptive_event_accepted"
+        ]
+        assert len(accepted) == 1
+        assert app._pending_control_events == {}
+
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize(
@@ -146,6 +217,77 @@ def test_constructor_rejects_bad_reference_id_and_workflow(tmp_path: Path) -> No
         _app(tmp_path, reference_workflows={"bad/id": {}})
     with pytest.raises(ValueError, match="reference workflow"):
         _app(tmp_path, reference_workflows={"bad": {}})
+
+
+def test_health_and_readiness_are_minimal_public_fail_closed_probes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        broker = SQLiteEffectBroker(tmp_path / "effects.db", broker_id="probe-broker")
+        app = ControlPlane(
+            AsyncGraphExecutor(SQLiteRunStore(tmp_path / "runs.db"), workers={}),
+            effect_broker=broker,
+            bearer_token="bounded-control-token-material-1234",
+            allowed_origins=("https://console.example",),
+        )
+
+        for path, expected_status in (("/healthz", "ok"), ("/readyz", "ready")):
+            status, payload, outbound = await _asgi(
+                app,
+                path=path,
+                headers=[(b"origin", b"https://console.example")],
+            )
+            assert status == 200
+            assert payload["status"] == expected_status
+            assert "token" not in str(payload).lower()
+            response_headers = dict(outbound[0]["headers"])  # type: ignore[arg-type]
+            assert response_headers[b"cache-control"] == b"no-store"
+            assert response_headers[b"access-control-allow-origin"] == b"https://console.example"
+
+        status, payload, _ = await _asgi(app, method="POST", path="/healthz")
+        assert status == 401
+        assert _error(payload) == "unauthorized"
+
+        status, payload, _ = await _asgi(app, path="/healthz", query=b"verbose=true")
+        assert status == 400
+        assert _error(payload) == "unknown_field"
+
+        monkeypatch.setattr(app.store, "schema_versions", lambda: ())
+        status, payload, _ = await _asgi(app, path="/readyz")
+        assert status == 503
+        assert payload == {
+            "error": {
+                "code": "not_ready",
+                "message": "the control plane is not ready",
+            }
+        }
+
+    asyncio.run(scenario())
+
+
+def test_readiness_fails_closed_when_effect_broker_cannot_be_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        broker = SQLiteEffectBroker(tmp_path / "effects.db", broker_id="probe-broker")
+        app = ControlPlane(
+            AsyncGraphExecutor(SQLiteRunStore(tmp_path / "runs.db"), workers={}),
+            effect_broker=broker,
+        )
+
+        def fail(*, limit: int = 100) -> tuple[object, ...]:
+            del limit
+            raise OSError("secret backend detail")
+
+        monkeypatch.setattr(broker, "pending_outbox", fail)
+        status, payload, _ = await _asgi(app, path="/readyz")
+        assert status == 503
+        assert _error(payload) == "not_ready"
+        assert "secret backend detail" not in str(payload)
+
+    asyncio.run(scenario())
 
 
 def test_strict_scalar_helpers_reject_bool_ranges_and_shape() -> None:
@@ -225,6 +367,145 @@ def test_submit_reports_admitting_active_existing_and_pre_store_refusal(tmp_path
         with pytest.raises(ControlAPIError) as refused:
             await refusing.submit(_workflow(), run_id="refused-run")
         assert refused.value.code == "admission_refused"
+
+    asyncio.run(scenario())
+
+
+def test_process_local_active_run_cap_rejects_then_recovers_capacity(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        release = asyncio.Event()
+
+        async def worker(_context: object) -> WorkerResult:
+            await release.wait()
+            return WorkerResult({"settled": True})
+
+        store = SQLiteRunStore(tmp_path / "active-cap.db")
+        app = ControlPlane(
+            AsyncGraphExecutor(store, workers={"work": worker}),  # type: ignore[dict-item]
+            max_active_runs=1,
+        )
+        accepted = await app.submit(_workflow(), run_id="active-one")
+        assert accepted["run"]["state"] == "running"  # type: ignore[index]
+
+        with pytest.raises(ControlAPIError) as saturated:
+            await app.submit(_workflow(), run_id="active-two")
+        assert saturated.value.status == 429
+        assert saturated.value.code == "active_run_limit"
+
+        release.set()
+        for _ in range(200):
+            if app.status("active-one")["state"] == "completed":
+                break
+            await asyncio.sleep(0.005)
+        else:
+            raise AssertionError("first run did not release process-local capacity")
+
+        second = await app.submit(_workflow(), run_id="active-two")
+        assert second["run"]["run_id"] == "active-two"  # type: ignore[index]
+        for _ in range(200):
+            if app.status("active-two")["state"] == "completed":
+                break
+            await asyncio.sleep(0.005)
+        else:
+            raise AssertionError("second run did not complete")
+
+    asyncio.run(scenario())
+
+
+def test_coordinator_recovery_reserves_active_capacity_across_await(
+    tmp_path: Path,
+) -> None:
+    class RecoveryRuntime:
+        def __init__(self, store: SQLiteRunStore) -> None:
+            self.store = store
+            self.control_entered = asyncio.Event()
+            self.release_control = asyncio.Event()
+            self.release_resume = asyncio.Event()
+            self.control_calls: list[str] = []
+
+        async def execute(self, *_args: object, **_kwargs: object) -> object:
+            raise AssertionError("a fresh execution must not bypass the reserved recovery slot")
+
+        async def apply_adaptive_control(
+            self,
+            run_id: str,
+            *,
+            kind: str,
+            expected_revision: int,
+            occurred_at_ms: int,
+            details: dict[str, object],
+        ) -> dict[str, object]:
+            assert kind == "coordinator.recover"
+            assert occurred_at_ms == 0
+            assert details == {}
+            self.control_calls.append(run_id)
+            self.control_entered.set()
+            await self.release_control.wait()
+            return {"state": {"revision": expected_revision + 1}}
+
+        async def resume_existing(self, *_args: object, **_kwargs: object) -> object:
+            await self.release_resume.wait()
+            return object()
+
+    async def scenario() -> None:
+        store = SQLiteRunStore(tmp_path / "recovery-cap.db")
+        for run_id in ("orphan-one", "orphan-two"):
+            store.get_or_create_run(
+                run_id=run_id,
+                graph_digest="graph",
+                envelope={},
+                deadline_at_ms=1,
+            )
+        runtime = RecoveryRuntime(store)
+        app = ControlPlane(runtime, max_active_runs=1)  # type: ignore[arg-type]
+
+        first = asyncio.create_task(
+            app.adaptive_control(
+                "orphan-one",
+                kind="coordinator.recover",
+                expected_revision=0,
+                occurred_at_ms=0,
+                details={},
+            )
+        )
+        await runtime.control_entered.wait()
+        assert app._pending_recoveries == 1
+
+        with pytest.raises(ControlAPIError) as second_recovery:
+            await app.adaptive_control(
+                "orphan-two",
+                kind="coordinator.recover",
+                expected_revision=0,
+                occurred_at_ms=0,
+                details={},
+            )
+        assert second_recovery.value.status == 429
+        assert second_recovery.value.code == "active_run_limit"
+
+        with pytest.raises(ControlAPIError) as fresh_submit:
+            await app.submit(_workflow(), run_id="submit-during-recovery")
+        assert fresh_submit.value.code == "active_run_limit"
+        assert runtime.control_calls == ["orphan-one"]
+
+        runtime.release_control.set()
+        response = await first
+        assert response["execution_resumed"] is True
+        assert app._pending_recoveries == 0
+        assert set(app._active) == {"orphan-one"}
+
+        runtime.release_resume.set()
+        await asyncio.sleep(0)
+        recovered = await app.adaptive_control(
+            "orphan-two",
+            kind="coordinator.recover",
+            expected_revision=0,
+            occurred_at_ms=0,
+            details={},
+        )
+        assert recovered["execution_resumed"] is True
+        assert runtime.control_calls == ["orphan-one", "orphan-two"]
 
     asyncio.run(scenario())
 

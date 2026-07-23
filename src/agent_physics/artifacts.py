@@ -7,6 +7,7 @@ Callers remain responsible for authenticating producers and enforcing access pol
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
@@ -16,6 +17,7 @@ from .serialization import content_digest
 
 ARTIFACT_SCHEMA_VERSION = "agent-physics-artifact/v1"
 CLAIM_SCHEMA_VERSION = "agent-physics-claim/v1"
+_SHA256_ADDRESS = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 class Sensitivity(str, Enum):
@@ -55,6 +57,10 @@ def _sha256_bytes(payload: bytes) -> str:
 
 def _address(digest: str) -> str:
     return f"sha256:{digest}"
+
+
+def _is_sha256_address(value: object) -> bool:
+    return isinstance(value, str) and _SHA256_ADDRESS.fullmatch(value) is not None
 
 
 def _validate_timestamp(created_at_ms: int, fresh_until_ms: int | None) -> None:
@@ -106,7 +112,7 @@ class Artifact:
             raise ValueError("schema, schema_version, media_type, and producer are required")
         _validate_timestamp(created_at_ms, fresh_until_ms)
         normalized_parents = tuple(sorted(set(parents)))
-        if any(not parent.startswith("sha256:") for parent in normalized_parents):
+        if any(not _is_sha256_address(parent) for parent in normalized_parents):
             raise ValueError("parent references must be sha256 addresses")
         payload_hash = _sha256_bytes(payload)
         material = cls._material(
@@ -174,7 +180,7 @@ class Artifact:
             return False
         if tuple(sorted(set(self.parents))) != self.parents:
             return False
-        if any(not parent.startswith("sha256:") for parent in self.parents):
+        if any(not _is_sha256_address(parent) for parent in self.parents):
             return False
         recalculated_payload = _sha256_bytes(self.payload)
         if recalculated_payload != self.payload_sha256:
@@ -234,7 +240,7 @@ class Claim:
         normalized_conflicts = tuple(sorted(set(contradicts)))
         if claim_id in normalized_conflicts:
             raise ValueError("a claim cannot contradict itself")
-        if any(not ref.startswith("sha256:") for ref in normalized_evidence):
+        if any(not _is_sha256_address(ref) for ref in normalized_evidence):
             raise ValueError("evidence references must be sha256 addresses")
         material = cls._material(
             claim_id=claim_id,
@@ -287,7 +293,7 @@ class Claim:
             return False
         if self.claim_id in self.contradicts:
             return False
-        if any(not ref.startswith("sha256:") for ref in self.evidence_refs):
+        if any(not _is_sha256_address(ref) for ref in self.evidence_refs):
             return False
         material = self._material(
             claim_id=self.claim_id,

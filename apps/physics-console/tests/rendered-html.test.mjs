@@ -31,6 +31,10 @@ test("server-renders the FINITE evidence console", async () => {
   assert.match(html, /Eighteen signals/);
   assert.match(html, /V5 INVARIANT STACK/);
   assert.match(html, /OPTIONAL LIVE CONTROL PLANE/);
+  assert.match(html, /Inject budget cut/);
+  assert.match(html, /Inject 429 \+ reset/);
+  assert.match(html, /Resume verified state/);
+  assert.match(html, /Worker\/provider calls during replay/);
   assert.match(html, /Adapt once/);
   assert.match(html, />10,000<\/strong>/);
   assert.match(html, />450<\/strong>/);
@@ -72,4 +76,10 @@ test("removes disposable starter assets and consumes a verified kernel artifact"
   assert.match(page, /pinned simulation data/i);
   assert.match(page, /refused before dispatch/);
   assert.match(page, /simulation-only adapter/);
+  assert.match(page, /start_paused: true/);
+  assert.match(page, /adaptive-replay/);
+  assert.match(page, /\/inspect/);
+  assert.match(page, /effect\.run_id !== runId/);
+  assert.match(page, /worker_or_provider_calls !== 0/);
+  assert.match(page, /external_effects_committed !== 0/);
 });

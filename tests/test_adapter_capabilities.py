@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from agent_physics.adapter_capabilities import (
+    AdapterCapabilityError,
+    validate_adapter_bindings,
+)
 from agent_physics.contracts import (
     AdapterCapabilities,
     AdapterRequirements,
     BackendProfile,
     CancellationSemantics,
     CheckpointSemantics,
+    Effect,
     EffectClass,
     RunEnvelope,
     TaskContract,
@@ -124,7 +130,10 @@ def test_capable_worker_is_admitted_and_manifest_binds_both_sides(tmp_path: Path
     [
         ({"provider": "other"}, "does not match selected provider"),
         ({"cancellation": CancellationSemantics.NONE}, "cancellation semantics"),
+        ({"checkpoint": CheckpointSemantics.NONE}, "checkpoint semantics"),
+        ({"streaming": False}, "required streaming"),
         ({"usage": UsageSemantics.ESTIMATED}, "usage semantics"),
+        ({"effect_fencing": False}, "required effect fencing"),
         ({"hidden_retries_max": 1}, "hidden retry bound"),
         ({"supported_effects": (EffectClass.READ,)}, "does not declare 'pure' support"),
     ],
@@ -147,13 +156,35 @@ def test_capability_mismatches_fail_before_dispatch(
         "hidden_retries_max": base["hidden_retries_max"],
     }
     values.update(mutation)
+    if "streaming" in mutation:
+        graph = ExecutionGraph.from_tasks(
+            (
+                TaskContract(
+                    "work",
+                    (_profile(),),
+                    adapter_requirements=replace(_requirements(), streaming=True),
+                ),
+            )
+        )
+    elif "effect_fencing" in mutation:
+        graph = ExecutionGraph.from_tasks(
+            (
+                TaskContract(
+                    "work",
+                    (_profile(),),
+                    adapter_requirements=replace(_requirements(), effect_fencing=True),
+                ),
+            )
+        )
+    else:
+        graph = _graph()
     worker.adapter_capabilities = AdapterCapabilities(**values)  # type: ignore[arg-type]
     executor = AsyncGraphExecutor(
         SQLiteRunStore(tmp_path / f"{message[:4]}.db"), workers={"work": worker}
     )
 
     with pytest.raises(AdmissionRefused, match=message):
-        asyncio.run(executor.execute(_graph(), _envelope(), run_id="mismatch"))
+        asyncio.run(executor.execute(graph, _envelope(), run_id="mismatch"))
     assert worker.calls == 0
 
 
@@ -196,3 +227,41 @@ def test_workflow_v2_compiles_strict_adapter_requirements() -> None:
     document["tasks"][0]["adapter_requirements"]["usage"] = "invented"
     with pytest.raises(WorkflowIRValidationError, match="expected one of"):
         compile_python(document)
+
+
+def test_binding_negotiation_skips_unrequired_and_write_tasks_but_rejects_invalid_manifest() -> (
+    None
+):
+    profile = _profile()
+    unrequired = TaskContract("unrequired", (profile,))
+    write = TaskContract(
+        "write",
+        (profile,),
+        effect=Effect(
+            kind=EffectClass.IDEMPOTENT_WRITE,
+            resource="simulation://write",
+            idempotency_key="write-once",
+        ),
+        adapter_requirements=_requirements(),
+    )
+    assert (
+        validate_adapter_bindings(
+            {"unrequired": unrequired, "write": write},
+            {"unrequired": profile, "write": profile},
+            {},
+        )
+        == {}
+    )
+
+    worker = CapableWorker()
+    worker.adapter_capabilities = replace(
+        worker.adapter_capabilities,
+        schema_version="finite-adapter-capabilities/v999",
+    )
+    required = TaskContract("required", (profile,), adapter_requirements=_requirements())
+    with pytest.raises(AdapterCapabilityError, match="unsupported adapter capability schema"):
+        validate_adapter_bindings(
+            {"required": required},
+            {"required": profile},
+            {"required": worker},
+        )

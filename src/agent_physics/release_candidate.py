@@ -61,6 +61,13 @@ _FORBIDDEN_PARTS = frozenset(
 _FORBIDDEN_SUFFIXES = frozenset(
     {".dll", ".dylib", ".key", ".p12", ".pem", ".pfx", ".pyc", ".pyd", ".so", ".sqlite3"}
 )
+_DEPLOYMENT_SOURCE_FILES = (
+    ".dockerignore",
+    "Dockerfile",
+    "MANIFEST.in",
+    "compose.yaml",
+    "requirements/container.txt",
+)
 
 
 class ReleaseCandidateError(ValueError):
@@ -510,11 +517,21 @@ def _validate_sdist(
             expected_prefix = path.name.removesuffix(".tar.gz")
             if prefix != expected_prefix:
                 raise ReleaseCandidateError("sdist root directory does not match its filename")
+            root_path = Path(project["root"])
+            present_deployment_files = tuple(
+                name for name in _DEPLOYMENT_SOURCE_FILES if (root_path / name).is_file()
+            )
+            if present_deployment_files and present_deployment_files != _DEPLOYMENT_SOURCE_FILES:
+                raise ReleaseCandidateError(
+                    "source tree has an incomplete deployment file set: "
+                    f"present={present_deployment_files!r}"
+                )
             required = {
                 f"{prefix}/LICENSE",
                 f"{prefix}/README.md",
                 f"{prefix}/pyproject.toml",
                 f"{prefix}/PKG-INFO",
+                *(f"{prefix}/{name}" for name in present_deployment_files),
                 *(f"{prefix}/src/{module}" for module in expected_modules),
             }
             missing = required - set(names)
@@ -552,9 +569,14 @@ def _validate_sdist(
                 raise ReleaseCandidateError(
                     f"sdist module bytes differ from src: {sorted(mismatched_modules)!r}"
                 )
-            for filename in ("LICENSE", "README.md", "pyproject.toml"):
+            for filename in (
+                "LICENSE",
+                "README.md",
+                "pyproject.toml",
+                *present_deployment_files,
+            ):
                 member = archive.extractfile(f"{prefix}/{filename}")
-                if member is None or member.read() != (Path(project["root"]) / filename).read_bytes():
+                if member is None or member.read() != (root_path / filename).read_bytes():
                     raise ReleaseCandidateError(f"sdist {filename} differs from the source tree")
             pkg_info = archive.extractfile(f"{prefix}/PKG-INFO")
             if pkg_info is None:
@@ -572,6 +594,7 @@ def _validate_sdist(
         "sha256": sha256_file(path),
         "member_count": len(names),
         "links_and_special_files": 0,
+        "deployment_files_verified": list(present_deployment_files),
         "requires_dist": requires_dist,
     }
 

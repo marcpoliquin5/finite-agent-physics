@@ -116,6 +116,31 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def scoped_effect_idempotency_key(
+    *,
+    run_id: str,
+    task_id: str,
+    attempt: int,
+    declared_key: str | None,
+) -> str:
+    """Derive the broker/target key while retaining the declared key as audit data."""
+
+    if not run_id or not task_id:
+        raise ValueError("run_id and task_id are required for effect idempotency")
+    if type(attempt) is not int or attempt <= 0:
+        raise ValueError("effect attempt must be a positive integer")
+    if declared_key is not None and (type(declared_key) is not str or not declared_key):
+        raise ValueError("declared effect idempotency key must be a non-empty string")
+    scope = {
+        "schema_version": "finite-effect-idempotency/v1",
+        "run_id": run_id,
+        "task_id": task_id,
+        "attempt": attempt,
+        "declared_idempotency_key": declared_key,
+    }
+    return "finite-effect/v1:" + _sha256(_canonical_json(scope))
+
+
 @dataclass(frozen=True, slots=True)
 class FencingToken:
     """Monotonic, broker-bound ownership token for one effect intent."""

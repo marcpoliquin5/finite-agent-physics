@@ -20,7 +20,8 @@ from agent_physics.adaptive_runtime import (
     replay_adaptive_records,
     run_adaptive_recovery_drill,
 )
-from agent_physics.contracts import BackendProfile, RunEnvelope, TaskContract
+from agent_physics.contracts import BackendProfile, Effect, EffectClass, RunEnvelope, TaskContract
+from agent_physics.effects import EffectState, SQLiteEffectBroker
 from agent_physics.graph import ExecutionGraph
 from agent_physics.run_store import SQLiteRunStore, Usage
 
@@ -423,3 +424,63 @@ def test_worker_calls_are_bounded_to_one_per_completed_task_in_drill(tmp_path) -
     assert counts == Counter({"intake": 1, "assessment": 1, "mandatory_alert": 1})
     assert "optional_enrichment" not in counts
     assert "optional_social" not in counts
+
+
+def test_effect_bearing_adaptive_graph_stops_at_durable_proposal_and_replays(
+    tmp_path,
+) -> None:
+    profile = _one_profile(tokens=1, cost=1, context=1)
+    graph = ExecutionGraph.from_tasks(
+        (
+            TaskContract("prepare", (profile,)),
+            TaskContract(
+                "publish",
+                (profile,),
+                ("prepare",),
+                effect=Effect(
+                    kind=EffectClass.IDEMPOTENT_WRITE,
+                    resource="fixture://publication",
+                    idempotency_key="adaptive-effect-test-v1",
+                ),
+            ),
+        )
+    )
+    store = _store(tmp_path, "effect-bearing.db")
+    broker = SQLiteEffectBroker(
+        tmp_path / "effect-bearing-effects.db",
+        broker_id="adaptive-effect-test",
+        clock_ms=lambda: 1_000,
+    )
+    calls: list[str] = []
+    runtime = AdaptiveRuntime(
+        store,
+        graph,
+        _small_envelope(),
+        run_id="effect-bearing",
+        workers=_worker_for(graph, calls),
+        effect_broker=broker,
+    )
+
+    result = runtime.run_until_blocked(start_at_ms=1)
+    output = result.outputs["publish"]
+    intent = broker.get(output["effect_intent_id"])  # type: ignore[index]
+
+    assert result.state.status is AdaptiveStatus.COMPLETED
+    assert calls == ["prepare"]
+    assert intent.state is EffectState.PROPOSED
+    assert intent.run_id == "effect-bearing"
+    assert intent.idempotency_key.startswith("finite-effect/v1:")
+    assert intent.idempotency_key != "adaptive-effect-test-v1"
+    assert intent.payload["declared_idempotency_key"] == "adaptive-effect-test-v1"
+    assert output["declared_idempotency_key"] == "adaptive-effect-test-v1"  # type: ignore[index]
+    assert output["executed_externally"] is False  # type: ignore[index]
+    assert not any(event.event_type == "effect.committed" for event in broker.pending_outbox())
+
+    replay = replay_adaptive_records(
+        graph,
+        _small_envelope(),
+        run_id="effect-bearing",
+        records=result.controller_records,
+    )
+    assert replay.passed is True
+    assert replay.final_state == result.state

@@ -18,6 +18,9 @@ it does not turn fixture, simulated, estimated, private, or human-unverified evi
 
 - Workflow execution is DAG-oriented. General loops, dynamic fan-out, recursive subgraphs, and
   speculative winner/loser branches are not production-supported semantics.
+- Explicit integers in the JSON/YAML wire format must stay within JavaScript's exact safe-integer
+  range. Internal sentinel defaults and signed-64-bit resource arithmetic remain wider; unbounded
+  internal physical defaults are omitted from the wire and restored during compilation.
 - Admission is conservative and can refuse work that might succeed under favorable stochastic
   conditions. A refusal is not a mathematical proof covering every possible backend or plan.
 - Profile p50/p95 latency, failure, quality, cost, quota, and physical values are declared inputs;
@@ -26,6 +29,9 @@ it does not turn fixture, simulated, estimated, private, or human-unverified evi
   multi-resource solver.
 - Runtime replanning is local and single-coordinator. There is no replicated scheduler, leader
   election, distributed lease service, work stealing, or high-availability failover.
+- Live adaptive execution is intentionally locked to the backend profile selected during admission.
+  A blocked provider can cause waiting, optional shedding, or a conservative residual refusal; the
+  controller does not search for or silently use an unadmitted fallback at runtime.
 
 ## Physical-resource limits
 
@@ -64,8 +70,9 @@ it does not turn fixture, simulated, estimated, private, or human-unverified evi
 - Semantic safety checks cover declared StormShift invariants and structured evidence. They do not
   prove general natural-language entailment, factual truth, translation quality, accessibility
   conformance, or safety for arbitrary domains.
-- Accessibility evidence is structural/attested unless a recorded rendered-browser audit says
-  otherwise.
+- Accessibility evidence combines structural checks with a recorded local desktop/mobile browser
+  reflow, heading, control-label, console-error, and request-error audit. It is not a screen-reader
+  test, assistive-technology certification, or full WCAG conformance audit.
 - Hostile text is prevented from widening authority in tested paths; this is not a claim of universal
   prompt-injection immunity.
 
@@ -75,17 +82,20 @@ it does not turn fixture, simulated, estimated, private, or human-unverified evi
   account mutation, or government/agency system is contacted.
 - Run and effect ledgers are separate SQLite transaction domains; there is no cross-database atomic
   transaction.
-- Stable idempotency repairs the demonstrated crash ambiguity only when the target honors the same
-  key and semantics. Every production target requires its own proof.
+- Runtime idempotency keys are scoped by run, task, attempt, and declared logical key, preventing
+  same-declaration effects from colliding across tested sequential, concurrent, and restarted runs.
+  Crash ambiguity is repaired only when the target honors that same key and semantics; every
+  production target requires its own proof.
 - Approval grants use a local deterministic authority for testing; production human identity,
   OIDC/IAM, delegation, revocation, and audit review are not implemented.
 - A run with an uncommitted proposed effect reports `awaiting_effects`, never `completed`.
 
 ## API and deployment limits
 
-- The REST/SSE service implements exact-origin CORS and optional bearer authentication. It does not
-  implement TLS termination, distributed rate limiting, OIDC, tenant RBAC, WAF policy, automated
-  retention, or HA deployment.
+- The REST/SSE service implements exact-origin CORS, optional bearer authentication, bounded local
+  active-run/control-event admission, health/readiness, and revision-fenced adaptive controls. It
+  does not implement TLS termination, distributed rate limiting, OIDC, tenant RBAC, WAF policy,
+  automated retention, or HA deployment.
 - The in-memory active-task registry is process-local. Durable events survive restart, but automatic
   reattachment/relaunch policy remains an operator responsibility.
 - The console's bearer token is kept in browser memory for the session; it is not an enterprise

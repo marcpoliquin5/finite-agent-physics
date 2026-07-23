@@ -577,6 +577,11 @@ class PhysicalResourceAnalyzer:
             raise PhysicalAdmissionError("graph must use the exact ExecutionGraph contract")
         if type(envelope) is not RunEnvelope:
             raise PhysicalAdmissionError("envelope must use the exact RunEnvelope contract")
+        if any(
+            type(task) is not TaskContract or type(task.profiles) is not tuple
+            for task in graph.tasks
+        ):
+            raise PhysicalAdmissionError("tasks and profile collections must be exact contracts")
         if not isinstance(selected_profiles, Mapping) or any(
             type(task_id) is not str for task_id in selected_profiles
         ):
@@ -631,10 +636,6 @@ class PhysicalResourceAnalyzer:
         selection: list[tuple[str, BackendProfile]] = []
         for task_id in sorted(selected_ids):
             task = by_id[task_id]
-            if type(task) is not TaskContract or type(task.profiles) is not tuple:
-                raise PhysicalAdmissionError(
-                    "tasks and profile collections must be exact contracts"
-                )
             profile = selected_profiles[task_id]
             if type(profile) is not BackendProfile:
                 raise PhysicalAdmissionError(

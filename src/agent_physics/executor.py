@@ -27,7 +27,7 @@ from typing import TypeVar, cast
 
 from .adapter_capabilities import AdapterCapabilityError, validate_adapter_bindings
 from .contracts import AdapterCapabilities, BackendProfile, RunEnvelope, TaskContract
-from .effects import EffectState, SQLiteEffectBroker
+from .effects import EffectState, SQLiteEffectBroker, scoped_effect_idempotency_key
 from .graph import ExecutionGraph, GraphValidationError
 from .physical_resources import (
     PhysicalAdmissionReport,
@@ -1167,8 +1167,12 @@ class AsyncGraphExecutor:
             raise EffectExecutionRefused(
                 f"task {task.task_id!r} declares a write; external execution is refused"
             )
-        idempotency_key = task.effect.idempotency_key or (
-            f"fixture-run:{run.run_id}:task:{task.task_id}"
+        declared_idempotency_key = task.effect.idempotency_key
+        idempotency_key = scoped_effect_idempotency_key(
+            run_id=run.run_id,
+            task_id=task.task_id,
+            attempt=1,
+            declared_key=declared_idempotency_key,
         )
         intent = self._effect_broker.propose(
             run_id=run.run_id,
@@ -1178,6 +1182,7 @@ class AsyncGraphExecutor:
             idempotency_key=idempotency_key,
             payload={
                 "task_id": task.task_id,
+                "declared_idempotency_key": declared_idempotency_key,
                 "dependency_outputs": dict(dependency_outputs),
                 "fixture_only": True,
             },
@@ -1186,6 +1191,7 @@ class AsyncGraphExecutor:
         output = {
             "effect_intent_id": intent.intent_id,
             "effect_state": intent.state.value,
+            "declared_idempotency_key": declared_idempotency_key,
             "executed_externally": False,
         }
         self.store.append_event(
@@ -1307,7 +1313,22 @@ class AsyncGraphExecutor:
                 raise DurableOutputInvalid(
                     f"durable effect intent for task {task_id!r} is unavailable"
                 ) from exc
-            if intent.action != task_id or intent.resource != task.effect.resource:
+            expected_idempotency_key = scoped_effect_idempotency_key(
+                run_id=run.run_id,
+                task_id=task_id,
+                attempt=1,
+                declared_key=task.effect.idempotency_key,
+            )
+            if (
+                intent.run_id != run.run_id
+                or intent.action != task_id
+                or intent.resource != task.effect.resource
+                or intent.idempotency_key != expected_idempotency_key
+                or intent.payload.get("declared_idempotency_key")
+                != task.effect.idempotency_key
+                or output.get("declared_idempotency_key")
+                != task.effect.idempotency_key
+            ):
                 raise DurableOutputInvalid(
                     f"durable effect intent for task {task_id!r} violates its contract"
                 )

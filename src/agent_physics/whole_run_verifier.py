@@ -384,7 +384,9 @@ def _string_list(
     for index, item in enumerate(values):
         item_path = f"{path}[{index}]"
         result.append(
-            _digest(item, item_path, address=address) if digest else _string(item, item_path)
+            _digest(item, item_path, address=address)
+            if digest or address
+            else _string(item, item_path)
         )
     return result
 

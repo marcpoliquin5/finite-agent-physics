@@ -63,9 +63,9 @@ entrant. No agent may infer or fabricate them.
 
 - [x] **31** Physics Console builds, lints, renders, and passes its locked zero-vulnerability npm audit.
 - [x] **32** Console clearly separates sealed replay from live API data and keeps bearer tokens in memory.
-- [x] **33** REST submit/status/inspect/cancel/approve and resumable SSE work in a black-box local run.
+- [x] **33** Health/readiness, REST lifecycle, start-paused controls, zero-call replay, caps, and resumable SSE work; the digest-bound default load proof re-verifies 64 real-loopback runs with zero external commits.
 - [ ] **34** A public or explicitly judge-shared HTTPS deployment exposes the intended judge path.
-- [ ] **35** Signed-out/judge-account checks cover keyboard, focus, screen reader, contrast, reflow, links, and errors.
+- [ ] **35** Signed-out/judge-account checks cover keyboard, focus, screen reader, contrast, reflow, links, and errors. Local desktop/mobile reflow and console/request-error checks pass, but they do not complete this external gate.
 
 ### H. Reproducible release
 

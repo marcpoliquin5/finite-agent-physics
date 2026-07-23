@@ -1,0 +1,38 @@
+services:
+  finite-api:
+    build:
+      context: .
+      args:
+        VCS_REF: ${FINITE_VCS_REF:-unverified}
+    image: finite-agent-physics:5.0.0rc1
+    init: true
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    cpus: "2.0"
+    mem_limit: 1g
+    mem_reservation: 256m
+    memswap_limit: 1g
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,uid=10001,gid=10001,mode=0700
+    environment:
+      FINITE_CONTROL_BEARER_TOKEN: ${FINITE_CONTROL_BEARER_TOKEN:?set FINITE_CONTROL_BEARER_TOKEN}
+      FINITE_CONTROL_ALLOWED_ORIGINS: ${FINITE_CONTROL_ALLOWED_ORIGINS:-}
+      FINITE_ALLOW_ANONYMOUS_STATUS_STREAM: "false"
+      FINITE_STATE_DIR: /var/lib/finite
+    ports:
+      - "127.0.0.1:${FINITE_CONTROL_PORT:-8080}:8080"
+    volumes:
+      - type: volume
+        source: finite-state
+        target: /var/lib/finite
+        read_only: false
+    stop_grace_period: 20s
+
+volumes:
+  finite-state:

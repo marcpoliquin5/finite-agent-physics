@@ -8,8 +8,9 @@ from typing import Any
 
 import pytest
 
-from agent_physics.contracts import EffectClass
+from agent_physics.contracts import MAX_RESOURCE_UNITS, EffectClass
 from agent_physics.workflow_ir import (
+    JSON_SAFE_INTEGER_MAX,
     UNSUPPORTED_SCHEMA_FEATURES,
     WORKFLOW_SCHEMA_VERSION,
     WorkflowIRValidationError,
@@ -221,6 +222,26 @@ def test_canonical_json_round_trip_is_exact_and_copy_is_detached() -> None:
     assert "\n" not in first.canonical_json
 
 
+def _javascript_json_round_trip(value: object) -> object:
+    """Model JSON.parse/stringify's binary64 number boundary without requiring Node."""
+
+    parsed = json.loads(
+        json.dumps(value, sort_keys=True, separators=(",", ":")),
+        parse_int=float,
+    )
+
+    def stringify(item: object) -> object:
+        if isinstance(item, dict):
+            return {key: stringify(child) for key, child in item.items()}
+        if isinstance(item, list):
+            return [stringify(child) for child in item]
+        if type(item) is float and item.is_integer():
+            return int(item)
+        return item
+
+    return json.loads(json.dumps(stringify(parsed), sort_keys=True, separators=(",", ":")))
+
+
 def test_compile_workflow_auto_detects_json_and_yaml_and_accepts_utf8_bytes() -> None:
     expected = compile_python(workflow_document())
     assert compile_workflow(json.dumps(workflow_document())).digest == expected.digest
@@ -388,6 +409,14 @@ def test_yaml_uses_a_safe_loader() -> None:
     malicious = "!!python/object/apply:os.system ['echo unsafe']"
     with pytest.raises(WorkflowIRValidationError, match="invalid YAML"):
         compile_yaml(malicious)
+
+
+@pytest.mark.parametrize("malformed", ["\x00", "\ud800"])
+def test_yaml_reader_failures_are_wrapped_in_the_public_validation_error(
+    malformed: str,
+) -> None:
+    with pytest.raises(WorkflowIRValidationError, match="invalid YAML"):
+        compile_yaml(malformed)
 
 
 def test_effect_contract_is_not_weakened_during_compilation() -> None:
@@ -646,6 +675,72 @@ def test_schema_v2_preserves_typed_physical_resource_units() -> None:
     assert compiled.to_python()["envelope"]["max_network_rtt_ms"] == 100
 
 
+def test_schema_v2_unbounded_caps_survive_javascript_json_round_trip_without_unsafe_numbers() -> (
+    None
+):
+    document = _typed_workflow_document()
+    compiled = compile_python(document)
+    normalized = compiled.to_python()
+    physical_cap_fields = {
+        "max_cpu_time_ms",
+        "max_peak_memory_bytes",
+        "max_peak_vram_bytes",
+        "max_storage_read_bytes",
+        "max_storage_write_bytes",
+        "max_network_ingress_bytes",
+        "max_network_egress_bytes",
+        "available_bandwidth_bps",
+        "max_network_rtt_ms",
+        "max_egress_cost_microusd",
+    }
+
+    assert physical_cap_fields.isdisjoint(normalized["envelope"])
+    assert compiled.envelope.max_cpu_time_ms == MAX_RESOURCE_UNITS
+    browser_document = _javascript_json_round_trip(normalized)
+    browser_result = compile_python(browser_document)  # type: ignore[arg-type]
+    assert browser_result.canonical_json == compiled.canonical_json
+    assert browser_result.digest == compiled.digest
+    assert browser_result.graph == compiled.graph
+    assert browser_result.envelope == compiled.envelope
+
+
+@pytest.mark.parametrize(
+    ("location", "value"),
+    [
+        ("deadline", JSON_SAFE_INTEGER_MAX + 1),
+        ("deadline", -JSON_SAFE_INTEGER_MAX - 1),
+        ("provider_limit", JSON_SAFE_INTEGER_MAX + 1),
+        ("physical_cap", JSON_SAFE_INTEGER_MAX + 1),
+        ("profile_usage", JSON_SAFE_INTEGER_MAX + 1),
+    ],
+)
+def test_workflow_ir_rejects_explicit_integers_outside_javascript_safe_range(
+    location: str,
+    value: int,
+) -> None:
+    document = _typed_workflow_document()
+    if location == "deadline":
+        document["envelope"]["deadline_ms"] = value
+    elif location == "provider_limit":
+        document["envelope"]["provider_limits"]["watsonx"] = value
+    elif location == "physical_cap":
+        document["envelope"]["max_cpu_time_ms"] = value
+    else:
+        document["tasks"][0]["profiles"][0]["input_tokens"] = value
+
+    with pytest.raises(WorkflowIRValidationError, match="JSON-safe range"):
+        compile_python(document)
+
+
+def test_workflow_ir_accepts_number_max_safe_integer_exactly() -> None:
+    document = _typed_workflow_document()
+    document["envelope"]["max_cpu_time_ms"] = JSON_SAFE_INTEGER_MAX
+
+    compiled = compile_python(document)
+
+    assert compiled.to_python()["envelope"]["max_cpu_time_ms"] == JSON_SAFE_INTEGER_MAX
+
+
 def test_physical_fields_are_v2_only_and_reject_boolean_integer_smuggling() -> None:
     legacy = workflow_document()
     legacy["envelope"]["max_cpu_time_ms"] = 10
@@ -656,3 +751,23 @@ def test_physical_fields_are_v2_only_and_reject_boolean_integer_smuggling() -> N
     versioned["tasks"][0]["profiles"][0]["network_rtt_ms"] = True
     with pytest.raises(WorkflowIRValidationError, match="expected an integer"):
         compile_python(versioned)
+
+
+def test_numeric_fields_reject_numeric_strings_without_coercion() -> None:
+    document = workflow_document()
+    document["tasks"][0]["value"] = "9"
+
+    with pytest.raises(WorkflowIRValidationError, match="value.*expected a finite number"):
+        compile_python(document)
+
+
+def test_compile_contracts_rejects_boolean_schema_versions() -> None:
+    compiled = compile_python(workflow_document())
+
+    with pytest.raises(WorkflowIRValidationError, match="schema_version.*expected one of"):
+        compile_contracts(compiled.graph, compiled.envelope, schema_version=True)
+
+
+def test_yaml_rejects_unhashable_mapping_keys_as_invalid_source() -> None:
+    with pytest.raises(WorkflowIRValidationError, match="invalid YAML"):
+        compile_yaml("? [one, two]\n: value\n")

@@ -36,7 +36,14 @@ from .effects import (
 )
 from .executor import ExecutionError, ExecutionResult
 from .graph import ExecutionGraph, GraphValidationError
-from .run_store import RunDefinition, RunEvent, RunNotFound, SQLiteRunStore
+from .run_store import (
+    SCHEMA_VERSION,
+    EventConflict,
+    RunDefinition,
+    RunEvent,
+    RunNotFound,
+    SQLiteRunStore,
+)
 from .workflow_ir import CompiledWorkflow, WorkflowIRValidationError, compile_python
 
 
@@ -51,12 +58,20 @@ _STATUS_ROUTE = re.compile(rf"/v1/runs/(?P<run_id>{_IDENTIFIER})/status\Z")
 _INSPECT_ROUTE = re.compile(rf"/v1/runs/(?P<run_id>{_IDENTIFIER})/inspect\Z")
 _EVENTS_ROUTE = re.compile(rf"/v1/runs/(?P<run_id>{_IDENTIFIER})/events\Z")
 _CANCEL_ROUTE = re.compile(rf"/v1/runs/(?P<run_id>{_IDENTIFIER})/cancel\Z")
+_CONTROL_EVENTS_ROUTE = re.compile(
+    rf"/v1/runs/(?P<run_id>{_IDENTIFIER})/control-events\Z"
+)
+_ADAPTIVE_REPLAY_ROUTE = re.compile(
+    rf"/v1/runs/(?P<run_id>{_IDENTIFIER})/adaptive-replay\Z"
+)
 _APPROVE_ROUTE = re.compile(
     rf"/v1/runs/(?P<run_id>{_IDENTIFIER})/effects/"
     rf"(?P<intent_id>{_IDENTIFIER})/approve\Z"
 )
 _REFERENCE_WORKFLOWS_ROUTE: Final[str] = "/v1/reference-workflows"
 _REFERENCE_WORKFLOW_ROUTE = re.compile(rf"/v1/reference-workflows/(?P<workflow_id>{_IDENTIFIER})\Z")
+_LIVENESS_ROUTE: Final[str] = "/healthz"
+_READINESS_ROUTE: Final[str] = "/readyz"
 _TERMINAL_EVENT_STATES: Final[dict[str, str]] = {
     "run.completed": "completed",
     "run.failed": "failed",
@@ -65,6 +80,14 @@ _TERMINAL_EVENT_STATES: Final[dict[str, str]] = {
 }
 _SSE_TERMINAL_STATES: Final[frozenset[str]] = frozenset(_TERMINAL_EVENT_STATES.values())
 _MAX_SQLITE_INTEGER: Final[int] = 9_223_372_036_854_775_807
+_ADAPTIVE_CONTROL_DETAIL_FIELDS: Final[dict[str, frozenset[str]]] = {
+    "provider.429": frozenset({"provider", "reset_at_ms"}),
+    "provider.reset": frozenset({"provider"}),
+    "provider.capacity": frozenset({"provider", "capacity"}),
+    "budget.cut": frozenset({"tokens", "cost_microusd", "context_bytes"}),
+    "coordinator.recover": frozenset(),
+    "runtime.resume": frozenset(),
+}
 
 
 class ExecutionRuntime(Protocol):
@@ -267,6 +290,8 @@ class ControlPlane:
         allow_anonymous_status_stream: bool = False,
         allowed_origins: tuple[str, ...] = (),
         reference_workflows: Mapping[str, Mapping[str, Any]] | None = None,
+        max_active_runs: int = 32,
+        max_control_events_per_run: int = 128,
     ) -> None:
         if max_body_bytes <= 0:
             raise ValueError("max_body_bytes must be positive")
@@ -274,6 +299,18 @@ class ControlPlane:
             raise ValueError("SSE timing values must be positive")
         if not isinstance(allow_anonymous_status_stream, bool):
             raise ValueError("allow_anonymous_status_stream must be a boolean")
+        if (
+            type(max_active_runs) is not int
+            or not 1 <= max_active_runs <= 1_000_000
+        ):
+            raise ValueError("max_active_runs must be an integer from 1 through 1000000")
+        if (
+            type(max_control_events_per_run) is not int
+            or not 1 <= max_control_events_per_run <= 1_000_000
+        ):
+            raise ValueError(
+                "max_control_events_per_run must be an integer from 1 through 1000000"
+            )
         if type(allowed_origins) is not tuple:
             raise ValueError("allowed_origins must be a tuple")
         normalized_origins: list[str] = []
@@ -299,10 +336,10 @@ class ControlPlane:
             if (
                 type(bearer_token) is not str
                 or not 32 <= len(bearer_token) <= 1_024
-                or any(character.isspace() or ord(character) < 33 for character in bearer_token)
+                or any(not 33 <= ord(character) <= 126 for character in bearer_token)
             ):
                 raise ValueError(
-                    "bearer_token must contain 32-1024 non-whitespace printable characters"
+                    "bearer_token must contain 32-1024 visible ASCII characters"
                 )
         self.runtime = runtime
         self.store = runtime.store
@@ -318,6 +355,17 @@ class ControlPlane:
         )
         self.allow_anonymous_status_stream = allow_anonymous_status_stream
         self.allowed_origins = allowed_origins
+        self.max_active_runs = max_active_runs
+        self.max_control_events_per_run = max_control_events_per_run
+        # A recovery mutates durable controller state before it can create the
+        # replacement execution task. Reserve that slot across the await so a
+        # burst of recover/submit requests cannot bypass max_active_runs.
+        self._pending_recoveries = 0
+        # Reserve a per-run control slot before awaiting the runtime reducer.
+        # Durable accepted markers alone are insufficient because concurrent
+        # requests can queue behind the session lock after observing the same
+        # count.
+        self._pending_control_events: dict[str, int] = {}
         compiled_references: dict[str, dict[str, object]] = {}
         for workflow_id, document in sorted((reference_workflows or {}).items()):
             self._validate_identifier(workflow_id, path="reference workflow ID")
@@ -343,6 +391,45 @@ class ControlPlane:
         """Whether this instance enforces a configured bearer credential."""
 
         return self._bearer_token_digest is not None
+
+    def health(self) -> dict[str, object]:
+        """Return a deliberately minimal process-liveness response."""
+
+        return {
+            "schema_version": "finite-control-health/v1",
+            "service": "finite-control-plane",
+            "status": "ok",
+        }
+
+    def readiness(self) -> dict[str, object]:
+        """Fail closed unless every configured durable dependency is readable."""
+
+        try:
+            observed_versions = self.store.schema_versions()
+            expected_versions = tuple(range(1, SCHEMA_VERSION + 1))
+            if observed_versions != expected_versions:
+                raise RuntimeError("run-store schema is incomplete")
+            effect_status = "not_configured"
+            if self.effect_broker is not None:
+                # A bounded outbox read exercises the broker connection and schema
+                # without mutating durable state or revealing an intent count.
+                self.effect_broker.pending_outbox(limit=1)
+                effect_status = "ok"
+        except Exception as exc:
+            raise ControlAPIError(
+                503,
+                "not_ready",
+                "the control plane is not ready",
+            ) from exc
+        return {
+            "schema_version": "finite-control-readiness/v1",
+            "service": "finite-control-plane",
+            "status": "ready",
+            "checks": {
+                "run_store": "ok",
+                "effect_broker": effect_status,
+            },
+        }
 
     @staticmethod
     def _validate_identifier(value: str, *, path: str) -> str:
@@ -379,28 +466,53 @@ class ControlPlane:
             del self._active[run_id]
         self._consume_execution(task)
 
+    def _discard_finished_executions(self) -> None:
+        for active_run_id, active in tuple(self._active.items()):
+            if active.task.done():
+                self._execution_done(active_run_id, active.task)
+
     async def submit(
         self,
         workflow: Mapping[str, Any],
         *,
         run_id: str | None = None,
+        start_paused: bool = False,
     ) -> dict[str, object]:
         """Validate and start a new run without bypassing runtime admission."""
 
         selected_id = run_id or self._run_id_factory()
         self._validate_identifier(selected_id, path="run_id")
+        if selected_id in self._active:
+            raise ControlAPIError(409, "run_active", f"run {selected_id!r} is already active")
+        self._discard_finished_executions()
+        if len(self._active) + self._pending_recoveries >= self.max_active_runs:
+            raise ControlAPIError(
+                429,
+                "active_run_limit",
+                "the process-local active-run limit has been reached",
+            )
         try:
             compiled: CompiledWorkflow = compile_python(workflow)
         except WorkflowIRValidationError as exc:
             raise ControlAPIError(422, "invalid_workflow", str(exc)) from exc
-        if selected_id in self._active:
-            raise ControlAPIError(409, "run_active", f"run {selected_id!r} is already active")
         try:
             self.store.get_run(selected_id)
         except RunNotFound:
             pass
         else:
             raise ControlAPIError(409, "run_exists", f"run {selected_id!r} already exists")
+
+        if type(start_paused) is not bool:
+            raise ControlAPIError(400, "invalid_request", "start_paused must be a boolean")
+        configure_start = getattr(self.runtime, "configure_start", None)
+        if start_paused and not callable(configure_start):
+            raise ControlAPIError(
+                422,
+                "adaptive_runtime_unavailable",
+                "start_paused requires the adaptive control runtime",
+            )
+        if callable(configure_start):
+            configure_start(selected_id, paused=start_paused)
 
         cancellation = asyncio.Event()
         task = asyncio.create_task(
@@ -427,6 +539,25 @@ class ControlPlane:
                     self.store.get_run(selected_id)
                 except RunNotFound:
                     raise ControlAPIError(422, "admission_refused", str(exc)) from exc
+            except Exception as exc:
+                safe_status = getattr(exc, "control_status", None)
+                safe_code = getattr(exc, "control_code", None)
+                safe_message = getattr(exc, "control_message", None)
+                if (
+                    type(safe_status) is int
+                    and safe_status == 422
+                    and isinstance(safe_code, str)
+                    and isinstance(safe_message, str)
+                ):
+                    try:
+                        self.store.get_run(selected_id)
+                    except RunNotFound:
+                        raise ControlAPIError(
+                            safe_status,
+                            safe_code,
+                            safe_message,
+                        ) from exc
+                raise
 
         try:
             run_status = self.status(selected_id)
@@ -511,6 +642,13 @@ class ControlPlane:
                     )
                 intents.append(_effect(intent))
 
+        adaptive_replay: dict[str, object] | None = None
+        replay = getattr(self.runtime, "adaptive_replay", None)
+        if callable(replay) and any(
+            event.event_type == "adaptive.controller_transition" for event in events
+        ):
+            adaptive_replay = cast(dict[str, object], replay(run_id))
+
         return {
             "run": self.status(run_id),
             "definition": {
@@ -522,8 +660,178 @@ class ControlPlane:
             "outputs": {task_id: completed[task_id].output for task_id in sorted(completed)},
             "actual_usage": actual,
             "effects": intents,
+            "adaptive_replay": adaptive_replay,
             "latest_event": _event(events[-1]) if events else None,
         }
+
+    @staticmethod
+    def _safe_adaptive_error(exc: Exception) -> ControlAPIError:
+        status = getattr(exc, "control_status", None)
+        code = getattr(exc, "control_code", None)
+        message = getattr(exc, "control_message", None)
+        if (
+            type(status) is int
+            and status in {404, 409, 422}
+            and isinstance(code, str)
+            and isinstance(message, str)
+        ):
+            return ControlAPIError(status, code, message)
+        return ControlAPIError(
+            409,
+            "adaptive_control_rejected",
+            "the adaptive runtime rejected the control operation",
+        )
+
+    async def adaptive_control(
+        self,
+        run_id: str,
+        *,
+        kind: str,
+        expected_revision: int,
+        occurred_at_ms: int,
+        details: Mapping[str, object],
+    ) -> dict[str, object]:
+        """Apply one revision-fenced control fact through the durable reducer."""
+
+        self._validate_identifier(run_id, path="run_id")
+        self._definition(run_id)
+        handler = getattr(self.runtime, "apply_adaptive_control", None)
+        if not callable(handler):
+            raise ControlAPIError(
+                409,
+                "adaptive_runtime_unavailable",
+                "this run is not controlled by the adaptive runtime",
+            )
+        accepted_controls = sum(
+            event.event_type == "control.adaptive_event_accepted"
+            for event in self.store.events(run_id)
+        )
+        pending_controls = self._pending_control_events.get(run_id, 0)
+        if accepted_controls + pending_controls >= self.max_control_events_per_run:
+            raise ControlAPIError(
+                429,
+                "control_event_limit",
+                "the durable per-run control-event limit has been reached",
+            )
+        self._pending_control_events[run_id] = pending_controls + 1
+
+        recovery_reserved = False
+        try:
+            active = self._active.get(run_id)
+            if kind == "coordinator.recover" and active is not None and not active.task.done():
+                raise ControlAPIError(
+                    409,
+                    "coordinator_still_active",
+                    "coordinator recovery requires an orphaned durable run",
+                )
+            if kind == "coordinator.recover":
+                self._discard_finished_executions()
+                if len(self._active) + self._pending_recoveries >= self.max_active_runs:
+                    raise ControlAPIError(
+                        429,
+                        "active_run_limit",
+                        "the process-local active-run limit has been reached",
+                    )
+                self._pending_recoveries += 1
+                recovery_reserved = True
+            try:
+                result = await handler(
+                    run_id,
+                    kind=kind,
+                    expected_revision=expected_revision,
+                    occurred_at_ms=occurred_at_ms,
+                    details=dict(details),
+                )
+            except Exception as exc:
+                raise self._safe_adaptive_error(exc) from exc
+            if not isinstance(result, dict):
+                raise ControlAPIError(
+                    409,
+                    "adaptive_control_rejected",
+                    "the adaptive runtime returned an invalid control response",
+                )
+
+            state = result.get("state")
+            next_revision = state.get("revision") if isinstance(state, dict) else None
+            marker_id = f"{run_id}:control:adaptive:{expected_revision}:{kind}"
+            try:
+                self.store.append_event(
+                    run_id=run_id,
+                    event_id=marker_id,
+                    event_type="control.adaptive_event_accepted",
+                    payload={
+                        "kind": kind,
+                        "expected_revision": expected_revision,
+                        "next_revision": next_revision,
+                        "control_payload_digest": hashlib.sha256(
+                            _canonical_json(
+                                {
+                                    "kind": kind,
+                                    "expected_revision": expected_revision,
+                                    "occurred_at_ms": occurred_at_ms,
+                                    "details": dict(details),
+                                }
+                            )
+                        ).hexdigest(),
+                    },
+                )
+            except EventConflict as exc:
+                raise ControlAPIError(
+                    409,
+                    "duplicate_control_event",
+                    "the control event identity was already consumed",
+                ) from exc
+
+            execution_resumed = False
+            if kind == "coordinator.recover":
+                resume = getattr(self.runtime, "resume_existing", None)
+                if not callable(resume):
+                    raise ControlAPIError(
+                        409,
+                        "adaptive_runtime_unavailable",
+                        "the adaptive runtime cannot resume recovered execution",
+                    )
+                cancellation = asyncio.Event()
+                task = asyncio.create_task(
+                    resume(run_id, cancellation_event=cancellation),
+                    name=f"finite-control:recovered:{run_id}",
+                )
+                self._active[run_id] = _ActiveExecution(cancellation, task)
+                task.add_done_callback(lambda completed: self._execution_done(run_id, completed))
+                execution_resumed = True
+            return {**result, "execution_resumed": execution_resumed}
+        finally:
+            if recovery_reserved:
+                self._pending_recoveries -= 1
+            remaining_controls = self._pending_control_events[run_id] - 1
+            if remaining_controls:
+                self._pending_control_events[run_id] = remaining_controls
+            else:
+                del self._pending_control_events[run_id]
+
+    def adaptive_replay(self, run_id: str) -> dict[str, object]:
+        """Replay a controller history without calling a worker or provider."""
+
+        self._validate_identifier(run_id, path="run_id")
+        self._definition(run_id)
+        handler = getattr(self.runtime, "adaptive_replay", None)
+        if not callable(handler):
+            raise ControlAPIError(
+                409,
+                "adaptive_runtime_unavailable",
+                "this run has no adaptive controller history",
+            )
+        try:
+            result = handler(run_id)
+        except Exception as exc:
+            raise self._safe_adaptive_error(exc) from exc
+        if not isinstance(result, dict):
+            raise ControlAPIError(
+                409,
+                "adaptive_replay_failed",
+                "the adaptive runtime returned an invalid replay response",
+            )
+        return cast(dict[str, object], result)
 
     def events(self, run_id: str, *, after: int = 0) -> tuple[dict[str, object], ...]:
         """Read ordered durable events after a per-run sequence cursor."""
@@ -841,10 +1149,12 @@ class ControlPlane:
         """
 
         expected = self._bearer_token_digest
-        if expected is None:
-            return
         method = str(scope.get("method", "")).upper()
         path = scope.get("path")
+        if method == "GET" and path in {_LIVENESS_ROUTE, _READINESS_ROUTE}:
+            return
+        if expected is None:
+            return
         public_status = isinstance(path, str) and (
             _RUN_ROUTE.fullmatch(path) is not None
             or _STATUS_ROUTE.fullmatch(path) is not None
@@ -1079,6 +1389,13 @@ class ControlPlane:
         if not isinstance(path, str):
             raise ControlAPIError(400, "invalid_request", "request path is unavailable")
 
+        if path in {_LIVENESS_ROUTE, _READINESS_ROUTE}:
+            if method != "GET":
+                raise ControlAPIError(405, "method_not_allowed", "GET is required")
+            self._query(scope, allowed=frozenset())
+            payload = self.health() if path == _LIVENESS_ROUTE else self.readiness()
+            return _Response(200, payload, ((b"cache-control", b"no-store"),))
+
         if path == _REFERENCE_WORKFLOWS_ROUTE:
             if method != "GET":
                 raise ControlAPIError(405, "method_not_allowed", "GET is required")
@@ -1116,7 +1433,7 @@ class ControlPlane:
             body = _object(
                 await self._read_json(scope, receive),
                 path="$",
-                allowed=frozenset({"run_id", "workflow"}),
+                allowed=frozenset({"run_id", "workflow", "start_paused"}),
                 required=frozenset({"workflow"}),
             )
             run_id = body.get("run_id")
@@ -1125,7 +1442,18 @@ class ControlPlane:
             workflow = body["workflow"]
             if not isinstance(workflow, dict):
                 raise ControlAPIError(400, "invalid_request", "workflow must be an object")
-            result = await self.submit(cast(dict[str, Any], workflow), run_id=run_id)
+            start_paused = body.get("start_paused", False)
+            if type(start_paused) is not bool:
+                raise ControlAPIError(
+                    400,
+                    "invalid_request",
+                    "start_paused must be a boolean",
+                )
+            result = await self.submit(
+                cast(dict[str, Any], workflow),
+                run_id=run_id,
+                start_paused=start_paused,
+            )
             created_id = cast(str, cast(dict[str, object], result["run"])["run_id"])
             return _Response(
                 202,
@@ -1166,6 +1494,73 @@ class ControlPlane:
                 reason=_string(reason, path="reason", maximum=512),
             )
             return _Response(202, result)
+
+        route = _CONTROL_EVENTS_ROUTE.fullmatch(path)
+        if route is not None:
+            if method != "POST":
+                raise ControlAPIError(405, "method_not_allowed", "POST is required")
+            self._query(scope, allowed=frozenset())
+            body = _object(
+                await self._read_json(scope, receive),
+                path="$",
+                allowed=frozenset(
+                    {"kind", "expected_revision", "occurred_at_ms", "details"}
+                ),
+                required=frozenset(
+                    {"kind", "expected_revision", "occurred_at_ms", "details"}
+                ),
+            )
+            kind = _string(body["kind"], path="kind", maximum=64)
+            allowed_details = _ADAPTIVE_CONTROL_DETAIL_FIELDS.get(kind)
+            if allowed_details is None:
+                raise ControlAPIError(
+                    422,
+                    "unsupported_control_event",
+                    "kind is not a registered adaptive control event",
+                )
+            details = _object(
+                body["details"],
+                path="details",
+                allowed=allowed_details,
+                required=allowed_details,
+            )
+            normalized_details: dict[str, object] = {}
+            for field, value in details.items():
+                if field == "provider":
+                    normalized_details[field] = _string(
+                        value,
+                        path="details.provider",
+                        maximum=128,
+                    )
+                else:
+                    normalized_details[field] = _integer(
+                        value,
+                        path=f"details.{field}",
+                        minimum=0,
+                    )
+            result = await self.adaptive_control(
+                route.group("run_id"),
+                kind=kind,
+                expected_revision=_integer(
+                    body["expected_revision"],
+                    path="expected_revision",
+                    minimum=1,
+                ),
+                occurred_at_ms=_integer(
+                    body["occurred_at_ms"],
+                    path="occurred_at_ms",
+                    minimum=0,
+                ),
+                details=normalized_details,
+            )
+            return _Response(202, result)
+
+        route = _ADAPTIVE_REPLAY_ROUTE.fullmatch(path)
+        if route is not None:
+            if method != "GET":
+                raise ControlAPIError(405, "method_not_allowed", "GET is required")
+            self._query(scope, allowed=frozenset())
+            return _Response(200, self.adaptive_replay(route.group("run_id")))
 
         route = _APPROVE_ROUTE.fullmatch(path)
         if route is not None:

@@ -1,0 +1,4 @@
+include .dockerignore
+include Dockerfile
+include compose.yaml
+include requirements/container.txt

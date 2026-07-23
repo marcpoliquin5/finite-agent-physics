@@ -36,21 +36,25 @@ instead of spending and hoping. Energy is labeled unsupported rather than estima
 
 ## 1:02-1:31 - Change the residual plan, keep settled history
 
-**Visual:** submit the bundled workflow to the configured live local API. Stream SSE events, then
-show the adaptive-recovery drill: capacity loss, optional shedding, second envelope pressure,
-durable revision digests, and completed task count unchanged.
+**Visual:** launch the bundled workflow paused through the live console. Show replay `VERIFIED`
+with zero worker/provider calls; inject a budget cut and a simulated provider 429/reset; then
+resume the exact durable revision and stream SSE until `awaiting_effects`. Briefly show the
+separate coordinator-crash recovery drill.
 
-**Narration:** "For an admitted run, FINITE reserves resources, settles actual use, and streams the
-durable event ledger. When capacity changes, it replans only the residual graph. Required work,
-elapsed time, spend, completed outputs, and effect boundaries stay fixed."
+**Narration:** "This is the live control plane, not the sealed replay. FINITE admits the run but
+pauses before dispatch. A budget cut and provider 429 cross a revision-fenced reducer, replay with
+zero model or provider calls, and shed only optional work. It resumes from that exact state and
+streams every durable transition. Required work, elapsed time, spend, completed outputs, and
+effect boundaries stay fixed."
 
 If the public API is unavailable, use the sealed replay and say: "This is the exact offline replay,
 not a live service."
 
 ## 1:31-1:52 - Consequential actions stop at intent
 
-**Visual:** `publish_alert` becomes `PROPOSED`; run state reads `awaiting_effects`. Show the separate
-hard-crash simulation drill with physical apply count one.
+**Visual:** `publish_simulated_alert` becomes `PROPOSED`; run state reads `awaiting_effects`; the
+console's settled inspection shows `proposed / 0 committed`. Show two runs receiving different
+run-scoped intent IDs, then the separate hard-crash simulation drill with physical apply count one.
 
 **Narration:** "Declared writes never enter model or fixture workers. They become durable,
 reviewable intents. Exact-scope approval, fencing, and a stable idempotency key keep a simulated

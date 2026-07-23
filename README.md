@@ -6,7 +6,7 @@
 
 FINITE is an experimental, framework-neutral SLO runtime for agent workflows. Agent Physics is
 the execution science underneath it: a deterministic control layer that decides what may run,
-where, and when when time, tokens, money, context, provider capacity, physical resources,
+where, and when time, tokens, money, context, provider capacity, physical resources,
 reliability, and real-world effects are finite.
 
 This repository is a **v5 release candidate**, not a stable `v5.0.0` release. The stable tag is
@@ -63,7 +63,8 @@ The ten cooperating planes are:
 
 1. A strict workflow compiler for canonical Python, JSON, and safe YAML contracts.
 2. Logical and physical admission that rejects impossible runs before worker calls.
-3. An adaptive residual controller that retains settled work, deadlines, use, and effects.
+3. An adaptive residual controller that retains settled work, deadlines, use, and effects while
+   remaining locked to the scheduler-admitted backend for each task.
 4. Integer quota and resource accounting with independent conservation replay.
 5. A content-addressed artifact and bounded-context fabric with lineage obligations.
 6. A declared adapter ABI for cancellation, usage, checkpoint, fencing, and effect semantics.
@@ -72,10 +73,10 @@ The ten cooperating planes are:
 9. Append-only evidence, whole-run replay, mutation checks, and release manifests.
 10. Bob MCP, authenticated REST/SSE, and a dual static/live Physics Console.
 
-See the detailed [architecture](docs/architecture.md), [effect kernel](docs/effect-kernel.md), and
-[capability audit](docs/capability-status.md).
+See the detailed [architecture](docs/architecture.md), [effect kernel](docs/effect-kernel.md),
+[live-load proof](docs/live-load-proof.md), and [capability audit](docs/capability-status.md).
 
-## Forty concrete v5 proof points
+## Fifty concrete v5 proof points
 
 Everything below is implemented and locally test-backed inside its stated boundary:
 
@@ -97,7 +98,8 @@ Everything below is implemented and locally test-backed inside its stated bounda
 16. RPM, TPM, reset-window, bounded-retry, and 429-suppression accounting.
 17. Protected multi-resource cost-to-go for mandatory work.
 18. Optional-work shedding when headroom disappears.
-19. Runtime residual replanning after capacity, failure, settlement, and envelope events.
+19. Runtime residual replanning after bounded provider, capacity, budget, and coordinator-recovery events,
+    with no fallback to a profile that did not pass logical and physical admission.
 20. Durable revision and decision digests for every replan.
 21. Absolute deadlines, bounded retries, cooperative cancellation, and visible uncooperative work.
 22. Manifest-bound SQLite resume without recalling completed fixture work.
@@ -117,8 +119,18 @@ Everything below is implemented and locally test-backed inside its stated bounda
 36. A preregistered paired deterministic fault laboratory with raw records and intervals.
 37. Twenty-two Bob-callable MCP tools tested through a real STDIO handshake.
 38. Typed submit, status, inspect, cancel, approve, and resumable event-stream HTTP routes.
-39. A live-capable console that keeps bearer credentials in memory and distinguishes static evidence.
+39. A live console that keeps bearer credentials in memory and distinguishes static evidence.
 40. Deterministic release-candidate checksums, SBOM, provenance, package inspection, and offline verification.
+41. JavaScript-safe workflow integers with browser round-trip and overflow rejection tests.
+42. Public liveness and fail-closed readiness probes that exercise both durable stores.
+43. Exact-origin CORS, constant-time bearer checks, bounded request bodies, and strict JSON parsing.
+44. Start-paused execution with revision-fenced budget, provider, capacity, reset, and resume controls.
+45. Call-free controller replay that binds every transition to prior/next state and control digests.
+46. Coordinator-crash recovery that charges ambiguous in-flight work without recalling it.
+47. Explicit admission caps and monotonic SSE cursors, exercised by a digest-bound 64-run real-socket load proof.
+48. Run-scoped effect idempotency proven across sequential, concurrent, and restarted executions.
+49. A non-root, read-only, capability-dropped OCI runtime with bounded CPU, memory, PIDs, and writable state.
+50. Zero-skip JUnit evidence, separate statement/branch gates, pinned dependency audits, and source/image scans.
 
 These are not claims of universal superiority, production readiness, live Granite success, or
 deployment by Miami-Dade County. The exact limits are maintained in [limitations](docs/limitations.md).
@@ -128,7 +140,7 @@ deployment by Miami-Dade County. The exact limits are maintained in [limitations
 Python 3.11 or later is required.
 
 ```powershell
-python -m pip install -e ".[dev,api]"
+python -m pip install -e ".[dev,api,langgraph]"
 python -m pytest
 agent-physics demo --policy adaptive
 finite-api
@@ -144,8 +156,25 @@ npm run dev
 ```
 
 The console accepts an exact API origin and an optional bearer token in memory. The committed
-artifact is a sealed deterministic replay; submitting the bundled `stormshift` reference workflow
-uses the configured local service and streams its durable events over SSE.
+artifact is a sealed deterministic replay. Its live path starts the bundled `stormshift` workflow
+paused, can inject a budget cut or simulated provider 429/reset through revision-fenced controls,
+shows the call-free replay digest, resumes from that revision, streams the durable ledger over
+SSE, and verifies run/effect isolation through the final inspection endpoint.
+
+For an authenticated browser demo, start the API with an exact console origin:
+
+```powershell
+$env:FINITE_CONTROL_BEARER_TOKEN = "replace-with-at-least-32-random-characters"
+$env:FINITE_CONTROL_ALLOWED_ORIGINS = "http://localhost:3000"
+finite-api --host 127.0.0.1 --port 8080
+```
+
+The hardened container path requires the same bearer token and binds to loopback by default:
+
+```powershell
+$env:FINITE_CONTROL_BEARER_TOKEN = "replace-with-at-least-32-random-characters"
+docker compose up --build
+```
 
 Useful local evidence commands:
 
@@ -153,6 +182,8 @@ Useful local evidence commands:
 agent-physics demo --policy sequential
 agent-physics judge-bundle
 agent-physics fair-benchmark --output artifacts/fair-benchmark
+python scripts/run_live_load.py --output artifacts/live-load
+python scripts/run_live_load.py --verify-only artifacts/live-load
 python scripts/export_console_artifact.py
 python scripts/generate_release_candidate.py --help
 python scripts/verify_release_candidate.py --help

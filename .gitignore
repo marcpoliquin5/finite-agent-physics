@@ -15,5 +15,6 @@ build/
 !.env.example
 artifacts/
 benchmark-results/
+output/
 *.sqlite3
 .finite/

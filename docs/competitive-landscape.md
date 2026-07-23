@@ -109,7 +109,7 @@ the behavior. It does not mean deployed, distributed, live-model, or externally 
 | Adapter capability negotiation | Executable local | [adapter-capability tests](../tests/test_adapter_capabilities.py) | Prevents known semantic mismatch; cannot prove an adapter's declaration is truthful. |
 | Framework-neutral wrapper plus LangGraph witness | Static wrapper plus one executable peer witness | [framework-conformance tests](../tests/test_framework_conformance.py), [LangGraph baseline tests](../tests/test_langgraph_baseline.py) | Actual pinned LangGraph 1.2.9 conformance only; no speed/reliability/cost superiority result. |
 | watsonx/Granite task worker | Executor-connected seam with injected tests | [watsonx worker tests](../tests/test_watsonx_worker.py) | Live mode exists, but no genuine live receipt is checked in at this snapshot. |
-| IBM Bob lifecycle/MCP | Eighteen tested local tools and lifecycle seam | [MCP tests](../tests/test_mcp_tools.py), [Bob lifecycle tests](../tests/test_bob_lifecycle.py) | Tests cannot prove a genuine IBM Bob session occurred. |
+| IBM Bob lifecycle/MCP | Twenty-two tested local tools and lifecycle seam | [MCP tests](../tests/test_mcp_tools.py), [Bob lifecycle tests](../tests/test_bob_lifecycle.py) | Tests cannot prove a genuine IBM Bob session occurred. |
 | Page action governance | Static PageAgent-style contract only | [framework-conformance tests](../tests/test_framework_conformance.py) | Alibaba PageAgent and BeeAI are not imported or executed. No browser action is performed. |
 | Semantic/numeric/bilingual validation | Executable bounded checks | [semantic-safety tests](../tests/test_semantic_safety.py) | No general entailment, translation-quality, or live-model semantic correctness claim. |
 | Release evidence gating | Executable local manifest validator | [release-manifest tests](../tests/test_release_manifest.py) | Genuine Bob, live watsonx, GitHub, deployment, video, and submission evidence still require the entrant/external systems. |
@@ -273,8 +273,10 @@ evidence outrank adding another framework badge.
 26. **OpenTelemetry export.** Correlate traces with run/event/artifact/effect digests.
 27. **Failure corpus expansion.** Add process death, SQLite lock pressure, malformed receipts,
     partial streams, clock skew, and network ambiguity.
-28. **SLO load evidence.** Measure concurrent runs and SSE clients with stated hardware and
-    backpressure behavior.
+28. **SLO load evidence — partial local pass.** A digest-bound real-loopback proof now exercises
+    two 32-way rounds, admission/control caps, proposal-only effect isolation, and call-free replay
+    with disclosed local timings. Add independent hardware reproduction, concurrent SSE-client
+    backpressure, and longer-duration soak evidence before making a capacity claim.
 29. **Cross-process restart drill.** Demonstrate recovery from a killed service, not just object
     reconstruction in one test process.
 30. **Independent reproduction.** Have a clean environment or second person execute the release

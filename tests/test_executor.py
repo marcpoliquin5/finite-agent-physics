@@ -729,10 +729,64 @@ def test_writes_become_proposed_effect_intents_or_are_refused(tmp_path: Path) ->
     output = result.outputs["publish"]
     assert isinstance(output, dict)
     assert output["executed_externally"] is False
+    assert output["declared_idempotency_key"] == "notice-42"
     intent = effect_broker.get(output["effect_intent_id"])
     assert intent.state is EffectState.PROPOSED
-    assert intent.idempotency_key == "notice-42"
+    assert intent.idempotency_key.startswith("finite-effect/v1:")
+    assert intent.idempotency_key != "notice-42"
+    assert intent.payload["declared_idempotency_key"] == "notice-42"
     assert result.run_state is RunState.AWAITING_EFFECTS
     assert any(event.event_type == "run.awaiting_effects" for event in result.events)
     assert not any(event.event_type == "run.completed" for event in result.events)
     assert not worker_called
+
+
+def test_executor_effect_intents_are_isolated_across_runs_and_restart(tmp_path: Path) -> None:
+    effect = Effect(
+        kind=EffectClass.IDEMPOTENT_WRITE,
+        resource="miami-eoc/notices",
+        idempotency_key="declared-notice-key",
+    )
+    graph = ExecutionGraph.from_tasks((_task("publish", effect=effect),))
+    run_database = tmp_path / "isolated-runs.db"
+    effect_database = tmp_path / "isolated-effects.db"
+    store = SQLiteRunStore(run_database)
+    broker = SQLiteEffectBroker(effect_database, broker_id="executor-isolation")
+    executor = AsyncGraphExecutor(store, workers={}, effect_broker=broker)
+    run_ids = ("effect-run-sequential", "effect-run-concurrent-a", "effect-run-concurrent-b")
+
+    async def execute_runs():
+        first = await executor.execute(graph, _envelope(), run_id=run_ids[0])
+        concurrent = await asyncio.gather(
+            executor.execute(graph, _envelope(), run_id=run_ids[1]),
+            executor.execute(graph, _envelope(), run_id=run_ids[2]),
+        )
+        return (first, *concurrent)
+
+    results = asyncio.run(execute_runs())
+    intents = [broker.get(result.outputs["publish"]["effect_intent_id"]) for result in results]
+    assert all(result.run_state is RunState.AWAITING_EFFECTS for result in results)
+    assert {intent.run_id for intent in intents} == set(run_ids)
+    assert len({intent.intent_id for intent in intents}) == len(run_ids)
+    assert len({intent.idempotency_key for intent in intents}) == len(run_ids)
+    assert all(
+        intent.payload["declared_idempotency_key"] == "declared-notice-key"
+        for intent in intents
+    )
+
+    restarted_store = SQLiteRunStore(run_database)
+    restarted_broker = SQLiteEffectBroker(effect_database, broker_id="executor-restarted")
+    restarted = AsyncGraphExecutor(
+        restarted_store,
+        workers={},
+        effect_broker=restarted_broker,
+    )
+    replayed = tuple(
+        asyncio.run(restarted.execute(graph, _envelope(), run_id=run_id))
+        for run_id in run_ids
+    )
+    assert all(result.resumed_task_ids == ("publish",) for result in replayed)
+    assert {
+        restarted_broker.get(result.outputs["publish"]["effect_intent_id"]).run_id
+        for result in replayed
+    } == set(run_ids)

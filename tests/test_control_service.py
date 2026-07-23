@@ -7,6 +7,7 @@ import pytest
 import agent_physics.control_service as control_service
 from agent_physics.control_service import (
     _environment_boolean,
+    _environment_positive_integer,
     build_control_service,
     build_control_service_from_environment,
 )
@@ -44,6 +45,8 @@ def test_environment_factory_defaults_closed_and_never_requires_token_serializat
         "http://localhost:3001",
         "https://judge.example",
     )
+    assert service.max_active_runs == 32
+    assert service.max_control_events_per_run == 128
     assert "environment-control-token-material" not in repr(service.__dict__)
 
 
@@ -80,6 +83,26 @@ def test_environment_boolean_accepts_explicit_false(value: str) -> None:
 def test_environment_boolean_uses_default_for_absent_or_blank() -> None:
     assert _environment_boolean({}, "FLAG", default=True) is True
     assert _environment_boolean({"FLAG": "  "}, "FLAG", default=False) is False
+
+
+def test_environment_positive_integer_is_strict_and_bounded() -> None:
+    assert _environment_positive_integer({}, "LIMIT", default=7) == 7
+    assert _environment_positive_integer({"LIMIT": " 42 "}, "LIMIT", default=7) == 42
+    for value in ("0", "-1", "+1", "1.0", "1000001", "１２"):
+        with pytest.raises(ValueError, match="LIMIT"):
+            _environment_positive_integer({"LIMIT": value}, "LIMIT", default=7)
+
+
+def test_environment_factory_applies_process_and_durable_control_caps(tmp_path: Path) -> None:
+    service = build_control_service_from_environment(
+        {
+            "FINITE_STATE_DIR": str(tmp_path / "state-caps"),
+            "FINITE_MAX_ACTIVE_RUNS": "3",
+            "FINITE_MAX_CONTROL_EVENTS_PER_RUN": "9",
+        }
+    )
+    assert service.max_active_runs == 3
+    assert service.max_control_events_per_run == 9
 
 
 def test_main_rejects_invalid_port_before_building_service(monkeypatch: pytest.MonkeyPatch) -> None:

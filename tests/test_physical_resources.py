@@ -452,3 +452,174 @@ def test_coverage_matrix_is_complete_and_energy_is_explicitly_unsupported() -> N
         if name != "energy"
     )
     assert any("no actual-usage settlement" in item for item in PHYSICAL_ADMISSION_LIMITATIONS)
+
+
+def test_peak_and_transport_arithmetic_overflows_refuse_without_wrapping() -> None:
+    peak = _profile(
+        "peak-a",
+        peak_memory_bytes=MAX_RESOURCE_UNITS,
+        peak_vram_bytes=0,
+        min_bandwidth_bps=0,
+        network_ingress_bytes=0,
+        network_egress_bytes=0,
+    )
+    peak_b = replace(peak, name="peak-b")
+    peak_graph = ExecutionGraph.from_tasks(
+        (TaskContract("a", (peak,)), TaskContract("b", (peak_b,)))
+    )
+    peak_report = analyze_physical_resources(
+        peak_graph,
+        _envelope(
+            deadline_ms=MAX_RESOURCE_UNITS,
+            max_parallelism=2,
+            max_cpu_time_ms=20,
+            max_peak_memory_bytes=MAX_RESOURCE_UNITS,
+            max_peak_vram_bytes=0,
+            max_storage_read_bytes=80,
+            max_storage_write_bytes=100,
+            max_network_ingress_bytes=0,
+            max_network_egress_bytes=0,
+            available_bandwidth_bps=0,
+            max_network_rtt_ms=9,
+            max_egress_cost_microusd=22,
+        ),
+        {"a": peak, "b": peak_b},
+    )
+    assert peak_report.status is PhysicalAdmissionStatus.REFUSED
+    assert peak_report.totals.conservative_peak_memory_bytes is None
+    assert "peak_memory" in peak_report.overflow_dimensions
+
+    byte_sum = _profile(
+        "byte-sum",
+        network_ingress_bytes=MAX_RESOURCE_UNITS,
+        network_egress_bytes=1,
+        min_bandwidth_bps=0,
+        network_rtt_ms=0,
+    )
+    byte_graph, byte_selection = _one_task(byte_sum)
+    byte_report = analyze_physical_resources(
+        byte_graph,
+        _envelope(
+            deadline_ms=MAX_RESOURCE_UNITS,
+            max_network_ingress_bytes=MAX_RESOURCE_UNITS,
+            max_network_egress_bytes=1,
+            available_bandwidth_bps=MAX_RESOURCE_UNITS,
+            max_network_rtt_ms=0,
+        ),
+        byte_selection,
+    )
+    assert byte_report.status is PhysicalAdmissionStatus.REFUSED
+    assert "transport_byte_sum" in byte_report.overflow_dimensions
+    assert "transport_critical_path" in byte_report.overflow_dimensions
+
+    combined = _profile(
+        "combined",
+        network_ingress_bytes=1,
+        network_egress_bytes=0,
+        min_bandwidth_bps=0,
+        network_rtt_ms=MAX_RESOURCE_UNITS,
+    )
+    combined_graph, combined_selection = _one_task(combined)
+    combined_report = analyze_physical_resources(
+        combined_graph,
+        _envelope(
+            deadline_ms=MAX_RESOURCE_UNITS,
+            max_network_ingress_bytes=1,
+            max_network_egress_bytes=0,
+            available_bandwidth_bps=8_000,
+            max_network_rtt_ms=MAX_RESOURCE_UNITS,
+        ),
+        combined_selection,
+    )
+    assert combined_report.transport_critical_path_lower_bound_ms == 1
+    assert combined_report.rtt_critical_path_lower_bound_ms == MAX_RESOURCE_UNITS
+    assert combined_report.transport_rtt_critical_path_lower_bound_ms is None
+    assert "transport_rtt_local" in combined_report.overflow_dimensions
+    assert "transport_rtt_critical_path" in combined_report.overflow_dimensions
+
+
+def test_physical_admission_rejects_every_malformed_selection_boundary() -> None:
+    analyzer = PhysicalResourceAnalyzer()
+    graph, selected = _one_task()
+
+    with pytest.raises(PhysicalAdmissionError, match="exact ExecutionGraph"):
+        analyzer.analyze(object(), _envelope(), selected)  # type: ignore[arg-type]
+    with pytest.raises(PhysicalAdmissionError, match="exact RunEnvelope"):
+        analyzer.analyze(graph, object(), selected)  # type: ignore[arg-type]
+    with pytest.raises(PhysicalAdmissionError, match="string-keyed mapping"):
+        analyzer.analyze(graph, _envelope(), [("task", _profile())])  # type: ignore[arg-type]
+    with pytest.raises(PhysicalAdmissionError, match="string-keyed mapping"):
+        analyzer.analyze(graph, _envelope(), {1: _profile()})  # type: ignore[dict-item]
+
+    malformed_task_graph = ExecutionGraph((object(),))  # type: ignore[arg-type]
+    with pytest.raises(PhysicalAdmissionError, match="exact contracts"):
+        analyzer.analyze(malformed_task_graph, _envelope(), {})
+
+    malformed_profiles_task = TaskContract("task", (_profile(),))
+    object.__setattr__(malformed_profiles_task, "profiles", [_profile()])
+    with pytest.raises(PhysicalAdmissionError, match="exact contracts"):
+        analyzer.analyze(ExecutionGraph((malformed_profiles_task,)), _envelope(), {})
+
+    invalid_envelope = replace(_envelope(), max_tokens=-1)
+    with pytest.raises(PhysicalAdmissionError, match="invalid envelope"):
+        analyzer.analyze(graph, invalid_envelope, selected)
+    with pytest.raises(PhysicalAdmissionError, match="unknown tasks"):
+        analyzer.analyze(graph, _envelope(), {"unknown": _profile()})
+
+    unknown_dependency = ExecutionGraph(
+        (TaskContract("task", (_profile(),), dependencies=("ghost",)),)
+    )
+    with pytest.raises(PhysicalAdmissionError, match="dependency referenced unknown task"):
+        analyzer.analyze(unknown_dependency, _envelope(), {"task": _profile()})
+
+    dependency = _profile("dependency")
+    child = _profile("child")
+    optional_graph = ExecutionGraph.from_tasks(
+        (
+            TaskContract("dependency", (dependency,), optional=True),
+            TaskContract(
+                "child",
+                (child,),
+                dependencies=("dependency",),
+                optional=True,
+            ),
+        )
+    )
+    with pytest.raises(PhysicalAdmissionError, match="lacks dependencies"):
+        analyzer.analyze(optional_graph, _envelope(), {"child": child})
+
+    with pytest.raises(PhysicalAdmissionError, match="must use BackendProfile"):
+        analyzer.analyze(graph, _envelope(), {"task": object()})  # type: ignore[dict-item]
+    with pytest.raises(PhysicalAdmissionError, match="not declared"):
+        analyzer.analyze(graph, _envelope(), {"task": _profile("different")})
+
+    weak = _profile("weak")
+    quality_graph = ExecutionGraph((TaskContract("task", (weak,), min_quality=1.1),))
+    with pytest.raises(PhysicalAdmissionError, match="quality floor"):
+        analyzer.analyze(quality_graph, _envelope(), {"task": weak})
+
+    cyclic = ExecutionGraph(
+        (
+            TaskContract("a", (_profile("a"),), ("b",), optional=True),
+            TaskContract("b", (_profile("b"),), ("a",), optional=True),
+        )
+    )
+    with pytest.raises(PhysicalAdmissionError, match="invalid graph: cycle"):
+        analyzer.analyze(cyclic, _envelope(), {})
+
+
+def test_physical_report_digest_requires_exact_nested_contract_types() -> None:
+    graph, selected = _one_task()
+    report = analyze_physical_resources(graph, _envelope(), selected)
+    mutations = (
+        replace(report, status="admitted"),  # type: ignore[arg-type]
+        replace(report, totals=object()),  # type: ignore[arg-type]
+        replace(report, checks=list(report.checks)),  # type: ignore[arg-type]
+        replace(report, checks=(object(),)),  # type: ignore[arg-type]
+        replace(report, coverage_matrix=list(report.coverage_matrix)),  # type: ignore[arg-type]
+        replace(report, coverage_matrix=(object(),)),  # type: ignore[arg-type]
+        replace(report, report_digest="A" * 64),
+        replace(report, report_digest="0" * 63),
+    )
+
+    assert all(not mutation.verify_digest() for mutation in mutations)

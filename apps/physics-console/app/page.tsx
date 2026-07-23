@@ -24,6 +24,40 @@ type LiveEvent = {
   occurred_at_ms: number;
 };
 
+type AdaptiveState = {
+  revision: number;
+  now_ms: number;
+  status: string;
+  shed_task_ids: string[];
+};
+
+type AdaptiveReplay = {
+  passed: boolean;
+  record_count: number;
+  control_digest: string;
+  worker_or_provider_calls: number;
+  final_state: AdaptiveState;
+  violations: { index: number; code: string; detail: string }[];
+};
+
+type AdaptiveControlResponse = {
+  state: AdaptiveState;
+  replay: AdaptiveReplay;
+  external_effects_committed: number;
+};
+
+type LiveEffect = {
+  intent_id: string;
+  run_id: string;
+  state: string;
+};
+
+type LiveInspection = {
+  run: LiveRunStatus;
+  effects: LiveEffect[];
+  adaptive_replay: AdaptiveReplay | null;
+};
+
 type RunEntry = {
   id: string;
   label: string;
@@ -257,6 +291,12 @@ export default function Home() {
   );
   const [liveStatus, setLiveStatus] = useState<LiveRunStatus | null>(null);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
+  const [adaptiveReplay, setAdaptiveReplay] = useState<AdaptiveReplay | null>(null);
+  const [controlBusy, setControlBusy] = useState(false);
+  const [runtimePaused, setRuntimePaused] = useState(false);
+  const [budgetInjected, setBudgetInjected] = useState(false);
+  const [providerFaultInjected, setProviderFaultInjected] = useState(false);
+  const [liveEffects, setLiveEffects] = useState<LiveEffect[]>([]);
   const runtimeAbort = useRef<AbortController | null>(null);
   const witness = artifact.witnesses[scenario];
   const decision = artifact.decisions[scenario][`${deadline}:${costCap}`];
@@ -296,6 +336,76 @@ export default function Home() {
       referrerPolicy: "no-referrer",
     });
     return (await responseJson(response)) as LiveRunStatus;
+  };
+
+  const refreshAdaptiveReplay = async (base: string, runId: string): Promise<AdaptiveReplay> => {
+    const response = await fetch(
+      `${base}/v1/runs/${encodeURIComponent(runId)}/adaptive-replay`,
+      {
+        headers: runtimeHeaders(),
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+      },
+    );
+    const replay = (await responseJson(response)) as AdaptiveReplay;
+    if (
+      replay.passed !== true ||
+      replay.worker_or_provider_calls !== 0 ||
+      typeof replay.final_state?.revision !== "number"
+    ) {
+      throw new Error("The call-free adaptive replay failed verification.");
+    }
+    return replay;
+  };
+
+  const postAdaptiveControl = async (
+    base: string,
+    runId: string,
+    kind: string,
+    expectedRevision: number,
+    occurredAtMs: number,
+    details: Record<string, string | number>,
+  ): Promise<AdaptiveControlResponse> => {
+    const response = await fetch(
+      `${base}/v1/runs/${encodeURIComponent(runId)}/control-events`,
+      {
+        method: "POST",
+        headers: runtimeHeaders(true),
+        body: JSON.stringify({
+          kind,
+          expected_revision: expectedRevision,
+          occurred_at_ms: occurredAtMs,
+          details,
+        }),
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+      },
+    );
+    const control = (await responseJson(response)) as AdaptiveControlResponse;
+    if (control.replay?.passed !== true || control.external_effects_committed !== 0) {
+      throw new Error("The adaptive control receipt failed its safety checks.");
+    }
+    setAdaptiveReplay(control.replay);
+    return control;
+  };
+
+  const inspectLiveRun = async (base: string, runId: string): Promise<LiveInspection> => {
+    const response = await fetch(`${base}/v1/runs/${encodeURIComponent(runId)}/inspect`, {
+      headers: runtimeHeaders(),
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+    });
+    const inspection = (await responseJson(response)) as LiveInspection;
+    if (
+      inspection.run?.run_id !== runId ||
+      !Array.isArray(inspection.effects) ||
+      inspection.effects.some((effect) => effect.run_id !== runId) ||
+      inspection.adaptive_replay?.passed !== true ||
+      inspection.adaptive_replay.worker_or_provider_calls !== 0
+    ) {
+      throw new Error("The settled run failed cross-run isolation or replay verification.");
+    }
+    return inspection;
   };
 
   const streamRunEvents = async (base: string, runId: string, signal: AbortSignal) => {
@@ -341,6 +451,11 @@ export default function Home() {
     setRuntimeMessage("Loading the digest-bound StormShift workflow from the control plane...");
     setLiveEvents([]);
     setLiveStatus(null);
+    setAdaptiveReplay(null);
+    setRuntimePaused(false);
+    setBudgetInjected(false);
+    setProviderFaultInjected(false);
+    setLiveEffects([]);
     try {
       const base = normalizedApiBase(apiBase);
       const referenceResponse = await fetch(`${base}/v1/reference-workflows/stormshift`, {
@@ -357,19 +472,27 @@ export default function Home() {
       const submitResponse = await fetch(`${base}/v1/runs`, {
         method: "POST",
         headers: runtimeHeaders(true),
-        body: JSON.stringify({ run_id: runId, workflow: reference.workflow }),
+        body: JSON.stringify({ run_id: runId, workflow: reference.workflow, start_paused: true }),
         credentials: "omit",
         referrerPolicy: "no-referrer",
         signal: abort.signal,
       });
       await responseJson(submitResponse);
       setRuntimeState("streaming");
-      setRuntimeMessage("Runtime accepted the envelope. Streaming its durable event ledger.");
+      setRuntimePaused(true);
+      setRuntimeMessage(
+        "Runtime admitted the envelope and paused before dispatch. Inject a condition or resume.",
+      );
       setLiveStatus(await refreshLiveStatus(base, runId));
+      setAdaptiveReplay(await refreshAdaptiveReplay(base, runId));
       await streamRunEvents(base, runId, abort.signal);
-      const settled = await refreshLiveStatus(base, runId);
-      setLiveStatus(settled);
+      const inspection = await inspectLiveRun(base, runId);
+      const settled = inspection.run;
+      setLiveStatus(inspection.run);
+      setLiveEffects(inspection.effects);
+      setAdaptiveReplay(inspection.adaptive_replay);
       setRuntimeState("settled");
+      setRuntimePaused(false);
       setRuntimeMessage(
         settled.state === "awaiting_effects"
           ? "Execution stopped at the approval boundary. No external effect was committed."
@@ -379,6 +502,88 @@ export default function Home() {
       if (abort.signal.aborted) return;
       setRuntimeState("error");
       setRuntimeMessage(error instanceof Error ? error.message : "Runtime connection failed.");
+    }
+  };
+
+  const injectBudgetCut = async () => {
+    if (!liveStatus || !adaptiveReplay) return;
+    setControlBusy(true);
+    try {
+      const base = normalizedApiBase(apiBase);
+      await postAdaptiveControl(
+        base,
+        liveStatus.run_id,
+        "budget.cut",
+        adaptiveReplay.final_state.revision,
+        adaptiveReplay.final_state.now_ms,
+        { tokens: 7_000, cost_microusd: 6_000, context_bytes: 29_500 },
+      );
+      setBudgetInjected(true);
+      setRuntimeMessage(
+        "The durable budget was cut, replay-verified, and optional work was shed.",
+      );
+    } catch (error) {
+      setRuntimeState("error");
+      setRuntimeMessage(error instanceof Error ? error.message : "Budget injection failed.");
+    } finally {
+      setControlBusy(false);
+    }
+  };
+
+  const injectProvider429 = async () => {
+    if (!liveStatus || !adaptiveReplay) return;
+    setControlBusy(true);
+    try {
+      const base = normalizedApiBase(apiBase);
+      const resetAtMs = adaptiveReplay.final_state.now_ms + 1;
+      const throttled = await postAdaptiveControl(
+        base,
+        liveStatus.run_id,
+        "provider.429",
+        adaptiveReplay.final_state.revision,
+        adaptiveReplay.final_state.now_ms,
+        { provider: "simulated-watsonx", reset_at_ms: resetAtMs },
+      );
+      await postAdaptiveControl(
+        base,
+        liveStatus.run_id,
+        "provider.reset",
+        throttled.state.revision,
+        resetAtMs,
+        { provider: "simulated-watsonx" },
+      );
+      setProviderFaultInjected(true);
+      setRuntimeMessage(
+        "A simulated provider 429/reset crossed the durable reducer and replayed with zero provider calls.",
+      );
+    } catch (error) {
+      setRuntimeState("error");
+      setRuntimeMessage(error instanceof Error ? error.message : "Provider injection failed.");
+    } finally {
+      setControlBusy(false);
+    }
+  };
+
+  const resumeLiveRun = async () => {
+    if (!liveStatus || !adaptiveReplay) return;
+    setControlBusy(true);
+    try {
+      const base = normalizedApiBase(apiBase);
+      await postAdaptiveControl(
+        base,
+        liveStatus.run_id,
+        "runtime.resume",
+        adaptiveReplay.final_state.revision,
+        adaptiveReplay.final_state.now_ms,
+        {},
+      );
+      setRuntimePaused(false);
+      setRuntimeMessage("Dispatch resumed from the verified durable controller state.");
+    } catch (error) {
+      setRuntimeState("error");
+      setRuntimeMessage(error instanceof Error ? error.message : "Resume failed.");
+    } finally {
+      setControlBusy(false);
     }
   };
 
@@ -397,6 +602,7 @@ export default function Home() {
         },
       );
       await responseJson(response);
+      setRuntimePaused(false);
       setRuntimeMessage("A durable cooperative-cancellation request was recorded.");
     } catch (error) {
       setRuntimeState("error");
@@ -610,6 +816,7 @@ export default function Home() {
             <span><b>Hard deadline</b><output>{formatSeconds(deadline)}</output></span>
             <input
               type="range"
+              aria-label="Hard deadline"
               min="5000"
               max="12000"
               step="1000"
@@ -623,6 +830,7 @@ export default function Home() {
             <span><b>Cost ceiling</b><output>{costCap.toLocaleString()} micro-USD</output></span>
             <input
               type="range"
+              aria-label="Cost ceiling"
               min="5000"
               max="16000"
               step="250"
@@ -702,6 +910,46 @@ export default function Home() {
                 Request cancel
               </button>
             </div>
+            <div className="adaptive-controls" aria-label="Adaptive fault controls">
+              <button
+                type="button"
+                disabled={
+                  !adaptiveReplay ||
+                  !runtimePaused ||
+                  budgetInjected ||
+                  controlBusy ||
+                  runtimeState !== "streaming"
+                }
+                onClick={() => void injectBudgetCut()}
+              >
+                Inject budget cut
+              </button>
+              <button
+                type="button"
+                disabled={
+                  !adaptiveReplay ||
+                  !runtimePaused ||
+                  providerFaultInjected ||
+                  controlBusy ||
+                  runtimeState !== "streaming"
+                }
+                onClick={() => void injectProvider429()}
+              >
+                Inject 429 + reset
+              </button>
+              <button
+                type="button"
+                disabled={
+                  !adaptiveReplay ||
+                  !runtimePaused ||
+                  controlBusy ||
+                  runtimeState !== "streaming"
+                }
+                onClick={() => void resumeLiveRun()}
+              >
+                Resume verified state
+              </button>
+            </div>
             <p>{runtimeMessage}</p>
             <small>
               Browser access requires an exact CORS origin allowlist. The token is never added
@@ -712,8 +960,45 @@ export default function Home() {
             <div className="runtime-summary">
               <div><span>Run ID</span><strong>{liveStatus?.run_id ?? "not launched"}</strong></div>
               <div><span>Durable state</span><strong>{liveStatus?.state ?? "--"}</strong></div>
-              <div><span>Events</span><strong>{liveEvents.length || liveStatus?.event_count || 0}</strong></div>
-              <div><span>External commits</span><strong>0 by API contract</strong></div>
+              <div>
+                <span>Events</span>
+                <strong>
+                  {Math.max(
+                    liveStatus?.event_count ?? 0,
+                    liveEvents.at(-1)?.sequence ?? 0,
+                  )}
+                </strong>
+              </div>
+              <div>
+                <span>Effect boundary</span>
+                <strong>
+                  {liveEffects.length > 0
+                    ? `${liveEffects.map((effect) => effect.state).join(", ")} / 0 committed`
+                    : "0 committed by contract"}
+                </strong>
+              </div>
+            </div>
+            <div className="adaptive-receipt">
+              <div>
+                <span>Replay</span>
+                <strong>{adaptiveReplay?.passed ? "VERIFIED" : "--"}</strong>
+              </div>
+              <div>
+                <span>Revision</span>
+                <strong>{adaptiveReplay?.final_state.revision ?? "--"}</strong>
+              </div>
+              <div>
+                <span>Worker/provider calls during replay</span>
+                <strong>{adaptiveReplay?.worker_or_provider_calls ?? "--"}</strong>
+              </div>
+              <div>
+                <span>Control digest</span>
+                <strong>
+                  {adaptiveReplay?.control_digest
+                    ? shortDigest(adaptiveReplay.control_digest)
+                    : "--"}
+                </strong>
+              </div>
             </div>
             <ol className="live-events">
               {liveEvents.length === 0 ? (

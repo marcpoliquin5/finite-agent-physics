@@ -60,8 +60,10 @@ Strong evidence in the current worktree includes:
 The candidate contains no genuine Bob session entry in `docs/bob-build-log.md`, no redacted
 live-Granite receipt, no public GitHub/tag/CI evidence, no public API, no live faulted
 cross-framework benchmark, and no eligibility, SkillsBuild, public video, project-page, or
-submission receipt. Sites version 5 (Sites source commit `47ba39a`) is deployed at the documented
-URL but verified owner-only. Those absences are release blockers, not paperwork to infer later.
+submission receipt. The documented Sites deployment is verified owner-only, not an anonymous judge
+path. Its mutable deployment version is intentionally not a release identity; the immutable
+repository commit and evidence digests are. Those absences are release blockers, not paperwork to
+infer later.
 
 ### Capability count in the current audit
 
@@ -93,7 +95,7 @@ work appears straightforward.
 | M12 | Partial | Slack, criticality, rank, and utility influence scheduling. | Explicit downstream-unlock score, surfaced priority vector, and adversarial tie tests are missing. |
 | M13 | Pass | `provider_quota.py` and its tests cover modeled RPM, TPM, concurrency, fixed resets, 429 suppression, bounded retry, settlement, and replay. | Production/shared quota is a separate S13/runtime concern; it is not claimed here. |
 | M14 | Pass | Scheduler admits optional work only from headroom remaining after protected completion. | None for deterministic planning. |
-| M15 | Partial | `replanning.py` records deterministic residual decisions for slowdown, failure, capacity, and envelope events; the integrated adaptive drill applies reset/capacity and budget-cut events after settled work. | Make the general replanner the mutation controller for every active-executor event and complete first-class settlement-trigger coverage. |
+| M15 | Partial | `replanning.py` records deterministic residual decisions for slowdown, failure, capacity, and envelope events. The live controller applies full scheduler/adapter/physical admission, binds exact admitted profiles, refuses unsafe fallback, preserves settled work, atomically caps concurrent controls, retires terminal sessions, and supports call-free durable replay. | Make the general replanner the mutation controller for every active-executor event and complete first-class settlement-trigger coverage. |
 | M16 | Partial | Executor tests cover deadlines, bounded retries, deterministic seeded jitter, circuit opening, redacted dead-letter events, cancellation, and restart-aware attempt counts. | One restart/recorded-replay proof must reproduce the complete resilience decision trace. |
 | M17 | Partial | Cooperative cancellation and uncooperative-worker detection are tested locally. | Expiring attempt leases, resource/effect fencing, and process-isolated termination are absent. |
 | M18 | Partial | Durable fixture/watsonx-worker state and adaptive restart avoid recalling completed work; unknown in-flight use is charged conservatively. | Run/effect/artifact stores are not one atomic distributed recovery boundary. |
@@ -103,18 +105,18 @@ work appears straightforward.
 | M22 | Partial | Required claims/artifacts, freshness, contradictions, bounded controlled citations, trust separation, and all-or-refuse packing are tested. | General citation placement, authenticated source trust, and open-ended entailment remain unsupported. |
 | M23 | Pass | Declared writes become durable proposed intents or are refused; fixture workers do not directly write. | Production adapters remain outside this local gate. |
 | M24 | Pass | Exact-scope, time-bound approval is required for high-risk simulated intents. | Production identity/IAM evidence is not claimed. |
-| M25 | Pass | Simulation-only transactional outbox, target idempotency, ambiguity recovery, restart, and duplicate tests yield one apply. | Each production target needs equivalent idempotency evidence. |
+| M25 | Pass | Simulation-only transactional outbox, run-scoped target idempotency, ambiguity recovery, and sequential/concurrent/restart/duplicate tests isolate same-declaration effects and yield one apply. | Each production target needs equivalent idempotency evidence. |
 | M26 | Absent | No speculation-group or winner state exists. | Add quarantine, winner selection, loser cancellation, and non-committable loser proof. |
 | M27 | Pass | Compiler-visible adapter requirements and executor admission enforce cancellation, checkpoint, streaming, usage, supported effects, fencing, and hidden-retry bounds before dispatch. | Remote adapter attestation is not claimed. |
 | M28 | Partial | Seeded benchmarks, quota traces, replans, and scheduler explanations replay deterministically in their subsystems. | One input-event-driven simulator with unified decision and trace hashes is absent. |
 | M29 | Partial / External-blocked | The watsonx worker runs inside durable executor state, requires provider usage, validates a public receipt, and resumes without recall in fake-inference tests. | Capture one genuine live-watsonx receipt bound to the release run and commit. |
 | M30 | Partial / External-blocked | Twenty-two local MCP tools and a real STDIO handshake are tested; durable preflight/run/status/explain/verify exists. | Capture those calls in one genuine IBM Bob session with preserved run/trace/commit evidence. |
-| M31 | Pass | Bearer-protected local submit/status/inspect/cancel/exact-scope-approve routes and cursor-resumable SSE operate over durable state in black-box tests. | Public hosting, OIDC, tenant RBAC, and HA are not claimed. |
-| M32 | Partial | The sealed/live-aware console renders DAG/Gantt/critical path, logical/physical pressure, protected budgets, effects, and replay evidence. | The Sites URL is owner-only and the complete judge-accessible hosted path is unverified. |
+| M31 | Pass | Health/readiness plus bearer-protected local lifecycle, start-paused controls, zero-call replay, approval, caps, and resumable SSE operate over durable state. A digest-bound default load proof independently re-verifies 64 real-loopback runs, effect isolation, and zero external commits/calls during replay. | This is local fixture evidence, not a hosted-capacity claim; public hosting, TLS termination, OIDC, tenant RBAC, distributed rate limits, and HA are not claimed. |
+| M32 | Partial | The sealed/live-aware console renders DAG/Gantt/critical path, logical/physical pressure, protected budgets, effects, and replay evidence. A local desktop/mobile browser flow exercises paused launch, controls, resume, SSE, replay, and run-scoped effect inspection without console/request errors. | The Sites URL is owner-only and the complete judge-accessible hosted path and assistive-technology audit are unverified. |
 | M33 | Pass | `decision_explanations.py` and its tests bind one public-fact/rule-ID record to every deterministic scheduler event, including completion and refusal, with reasoning access explicitly false. | Other planes need comparable explanations, but the scheduler gate passes. |
 | M34 | Pass | Adaptive controller records replay without workers and reproduce state/decision/control digests; whole-run replay binding and subsystem replayers fail closed on mutation. | No live-model semantic re-execution claim. |
 | M35 | Partial | The executable fair benchmark fixes one excluded warmup plus 30 preregistered measured seeds per executed system, requires actual local FINITE/plain receipts, conditionally executes only the exact LangGraph pin, keeps PageAgent unexecuted and metric-free, and emits paired intervals without a winner; the separate simulator slice adds paired fault transforms. | Identical live tasks/models/tools/validators/cache rules, paired runtime faults, hardware disclosure, and immutable raw live evidence are absent. |
-| M36 | Partial | StormShift adds bounded citation, bilingual controlled-fact, freshness, URL, authority-taint, safety, and static-accessibility gating plus a registered adversarial corpus. | Live Granite, general entailment/translation quality, and rendered accessibility remain unproved. |
+| M36 | Partial | StormShift adds bounded citation, bilingual controlled-fact, freshness, URL, authority-taint, safety, and static-accessibility gating plus a registered adversarial corpus and a local desktop/mobile rendered-browser reflow/error audit. | Live Granite, general entailment/translation quality, screen-reader testing, and full WCAG conformance remain unproved. |
 | M37 | Partial / External-blocked | CLI/MCP/API entry points, deterministic candidate generation/offline verification, cross-platform CI gates, and Bob templates exist. | Fresh-clone timing, genuine Bob provenance, immutable public release, and judge-path verification are absent. |
 
 ## S01-S25 audit

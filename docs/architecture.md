@@ -57,7 +57,9 @@ flowchart TD
 ### 1. Compiler and typed ports
 
 Workflow IR v2 accepts strict Python mappings, duplicate-rejecting JSON, and safe
-duplicate-rejecting YAML. It normalizes one canonical document and SHA-256 digest. Unknown fields,
+duplicate-rejecting YAML. It normalizes one canonical document and SHA-256 digest. Explicit wire
+integers must fit JavaScript's exactly representable range; internal signed-int64 "unbounded"
+physical sentinels are omitted from the wire and restored only after parsing. Unknown fields,
 unsupported schema versions, cycles, unknown dependencies, duplicate IDs, missing producers, and
 incompatible typed input/output ports are rejected before execution.
 
@@ -69,7 +71,10 @@ required quality floor, or authorize a write.
 The logical scheduler selects a valid backend profile while protecting mandatory work across
 deadline, token, cost, context, quality, reliability, and concurrency constraints. The physical
 analyzer then checks CPU, memory, VRAM, storage, network, bandwidth, RTT, and egress against the
-same selection. Both run before the runtime calls a worker.
+same selection. Adapter requirements and deterministic serial p95 deadline feasibility are checked
+at this boundary as well. Both planes run before the runtime calls a worker, and the live controller
+binds every task to that exact admitted profile. A provider block may wait, shed already-admitted
+optional work, or refuse the residual run; it cannot fall through to an unadmitted backend.
 
 The analyzer returns a digest-bound coverage matrix that distinguishes estimated, derived, and
 unsupported dimensions. A refusal is a conservative admission refusal, not a general proof that
@@ -78,9 +83,16 @@ no conceivable implementation could succeed.
 ### 3. Adaptive residual control
 
 The runtime can apply typed capacity, failure, settlement, and envelope events to the durable
-residual state. Every revision retains elapsed time, settled use, completed outputs, deadlines,
-effect boundaries, and prior digests. Optional work may be shed; completed work is never recalled
-merely because the plan changes.
+residual state. The API can start a run paused and accept revision-fenced provider 429/reset,
+capacity, budget-cut, resume, and coordinator-recovery facts. Every revision retains elapsed time,
+settled use, completed outputs, deadlines, effect boundaries, and prior digests. Optional work may
+be shed; completed work is never recalled merely because the plan changes. A separate replay path
+reconstructs the controller without calling a worker or provider.
+
+Task and run deadlines are absolute. Residual serial feasibility is rechecked before dispatch, and
+a worker settlement received after its declared deadline is charged conservatively before the run
+refuses. Terminal controller sessions are retired from process memory while durable replay remains
+available. The control-event limit reserves capacity atomically before concurrent requests yield.
 
 The local controller is a single-coordinator implementation. It does not provide distributed
 leader election, cross-host leases, or high availability.
@@ -124,9 +136,11 @@ committable publication intent in the tested path.
 ### 8. Effect intent kernel
 
 Declared writes never enter fixture or Granite workers. The runtime creates a durable proposed
-intent. High-risk simulated actions require an exact-scope, time-bound approval grant. Fencing,
-stable idempotency keys, a transactional outbox, ambiguity recovery, and compensation are tested
-against a simulation-only target.
+intent. High-risk simulated actions require an exact-scope, time-bound approval grant. The broker
+key deterministically binds run, task, attempt, and the declared logical key; the logical key stays
+in the receipt for audit. This keeps restart retries idempotent inside a run while preventing two
+sequential or concurrent runs from sharing an intent. Fencing, a transactional outbox, ambiguity
+recovery, and compensation are tested against a simulation-only target.
 
 Run and effect ledgers remain separate SQLite transaction domains. Stable idempotency repairs the
 demonstrated crash gap, but there is no cross-database atomic commit.
@@ -146,13 +160,17 @@ checksums, CycloneDX SBOM data, and SLSA-style provenance. These artifacts expli
 ### 10. Control surfaces
 
 - **MCP:** 22 local tools, including the Bob lifecycle and v5 evidence drills, over STDIO.
-- **REST:** versioned submit, status, inspect, cancel, effect approval, reference-workflow, and
-  ordered-event endpoints.
+- **REST:** versioned submit, status, inspect, cancel, effect approval, adaptive control/replay,
+  reference-workflow, health/readiness, and ordered-event endpoints.
 - **SSE:** resumable per-run event streaming with cursor validation and heartbeats.
 - **Console:** a sealed static replay plus an optional live API mode; bearer tokens stay in memory.
 
-The control API uses a configured bearer token and exact-origin CORS. TLS, rate limiting, OIDC,
-tenant RBAC, retention automation, and distributed ownership are deployment responsibilities.
+The control API uses a configured bearer token, exact-origin CORS, strict bounded JSON, a
+process-local active-run limit, and a durable per-run control-event limit. The OCI deployment runs
+as a non-root user with a read-only root filesystem, dropped capabilities, no-new-privileges,
+bounded CPU/memory/PIDs, and one explicit writable state volume. TLS, distributed rate limiting,
+OIDC, tenant RBAC, retention automation, and distributed ownership remain deployment
+responsibilities.
 
 ## Durable execution sequence
 

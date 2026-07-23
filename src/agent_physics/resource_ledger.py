@@ -432,6 +432,8 @@ def replay_and_verify(
         failures.append(VerificationFailure(sequence, code, detail))
 
     for position, event in enumerate(event_tuple, start=1):
+        if type(event.attempt_id) is not str or not event.attempt_id.strip():
+            fail(event.sequence, "invalid_attempt_id", "attempt ID must be a non-empty string")
         if event.sequence != position:
             fail(event.sequence, "non_monotonic_sequence", f"expected={position}")
         expected_event_id = f"{EVENT_ID_PREFIX}-{position:012d}"
@@ -487,11 +489,10 @@ def replay_and_verify(
                 terminal[event.attempt_id] = "cancelled"
         else:
             expected_reason = "unknown_operation"
+            fail(event.sequence, "unknown_operation", repr(event.operation))
 
         expected_reservation = (
-            event.reservation
-            if event.operation is LedgerOperation.RESERVE
-            else reservation_before
+            event.reservation if event.operation is LedgerOperation.RESERVE else reservation_before
         )
         if event.reservation != expected_reservation:
             fail(
@@ -513,7 +514,9 @@ def replay_and_verify(
         committed = replayed.spent.add(replayed.held)
         if not committed.fits_within(capacity):
             fail(event.sequence, "cap_breach", f"committed={committed.as_dict()}")
-        expected_available = capacity.subtract(committed)
+            expected_available = ResourceVector.zero()
+        else:
+            expected_available = capacity.subtract(committed)
         if replayed.available != expected_available:
             fail(event.sequence, "negative_or_hidden_balance", "available balance mismatch")
 

@@ -43,6 +43,9 @@ WORKFLOW_SCHEMA_VERSION = 2
 
 SUPPORTED_WORKFLOW_SCHEMA_VERSIONS = frozenset({1, 2})
 
+JSON_SAFE_INTEGER_MAX = (1 << 53) - 1
+"""Largest integer that survives a JSON number round trip through JavaScript."""
+
 UNSUPPORTED_SCHEMA_FEATURES = (
     "alternative branches",
     "speculative execution",
@@ -198,10 +201,15 @@ def _load_json(text: str) -> Any:
 
 
 def _load_yaml(text: str) -> Any:
+    loader: _UniqueKeySafeLoader | None = None
     try:
-        return yaml.load(text, Loader=_UniqueKeySafeLoader)
-    except (yaml.YAMLError, RecursionError) as exc:
+        loader = _UniqueKeySafeLoader(text)
+        return loader.get_single_data()
+    except (yaml.YAMLError, UnicodeError, RecursionError) as exc:
         raise WorkflowIRValidationError(f"invalid YAML: {exc}") from exc
+    finally:
+        if loader is not None:
+            loader.dispose()
 
 
 def _compile_document(document: Any) -> CompiledWorkflow:
@@ -309,47 +317,25 @@ def _compile_envelope(value: Any, *, schema_version: int) -> RunEnvelope:
             f"{path}.min_modeled_success_probability",
         ),
         provider_limits=provider_limits,
-        max_cpu_time_ms=_integer(
-            obj.get("max_cpu_time_ms", MAX_RESOURCE_UNITS),
-            f"{path}.max_cpu_time_ms",
-        ),
-        max_peak_memory_bytes=_integer(
-            obj.get("max_peak_memory_bytes", MAX_RESOURCE_UNITS),
-            f"{path}.max_peak_memory_bytes",
-        ),
-        max_peak_vram_bytes=_integer(
-            obj.get("max_peak_vram_bytes", MAX_RESOURCE_UNITS),
-            f"{path}.max_peak_vram_bytes",
-        ),
-        max_storage_read_bytes=_integer(
-            obj.get("max_storage_read_bytes", MAX_RESOURCE_UNITS),
-            f"{path}.max_storage_read_bytes",
-        ),
-        max_storage_write_bytes=_integer(
-            obj.get("max_storage_write_bytes", MAX_RESOURCE_UNITS),
-            f"{path}.max_storage_write_bytes",
-        ),
-        max_network_ingress_bytes=_integer(
-            obj.get("max_network_ingress_bytes", MAX_RESOURCE_UNITS),
-            f"{path}.max_network_ingress_bytes",
-        ),
-        max_network_egress_bytes=_integer(
-            obj.get("max_network_egress_bytes", MAX_RESOURCE_UNITS),
-            f"{path}.max_network_egress_bytes",
-        ),
-        available_bandwidth_bps=_integer(
-            obj.get("available_bandwidth_bps", MAX_RESOURCE_UNITS),
-            f"{path}.available_bandwidth_bps",
-        ),
-        max_network_rtt_ms=_integer(
-            obj.get("max_network_rtt_ms", MAX_RESOURCE_UNITS),
-            f"{path}.max_network_rtt_ms",
-        ),
-        max_egress_cost_microusd=_integer(
-            obj.get("max_egress_cost_microusd", MAX_RESOURCE_UNITS),
-            f"{path}.max_egress_cost_microusd",
-        ),
+        max_cpu_time_ms=_physical_cap(obj, "max_cpu_time_ms", path),
+        max_peak_memory_bytes=_physical_cap(obj, "max_peak_memory_bytes", path),
+        max_peak_vram_bytes=_physical_cap(obj, "max_peak_vram_bytes", path),
+        max_storage_read_bytes=_physical_cap(obj, "max_storage_read_bytes", path),
+        max_storage_write_bytes=_physical_cap(obj, "max_storage_write_bytes", path),
+        max_network_ingress_bytes=_physical_cap(obj, "max_network_ingress_bytes", path),
+        max_network_egress_bytes=_physical_cap(obj, "max_network_egress_bytes", path),
+        available_bandwidth_bps=_physical_cap(obj, "available_bandwidth_bps", path),
+        max_network_rtt_ms=_physical_cap(obj, "max_network_rtt_ms", path),
+        max_egress_cost_microusd=_physical_cap(obj, "max_egress_cost_microusd", path),
     )
+
+
+def _physical_cap(obj: Mapping[str, Any], field: str, path: str) -> int:
+    """Decode omitted unbounded caps without putting an unsafe sentinel on the wire."""
+
+    if field not in obj:
+        return MAX_RESOURCE_UNITS
+    return _integer(obj[field], f"{path}.{field}")
 
 
 def _compile_task(value: Any, index: int, *, schema_version: int) -> TaskContract:
@@ -659,6 +645,11 @@ def _array(value: Any, path: str) -> list[Any] | tuple[Any, ...]:
 def _integer(value: Any, path: str) -> int:
     if type(value) is not int:
         raise WorkflowIRValidationError(f"{path}: expected an integer")
+    if not -JSON_SAFE_INTEGER_MAX <= value <= JSON_SAFE_INTEGER_MAX:
+        raise WorkflowIRValidationError(
+            f"{path}: integer exceeds the JSON-safe range "
+            f"[-{JSON_SAFE_INTEGER_MAX}, {JSON_SAFE_INTEGER_MAX}]"
+        )
     return value
 
 
@@ -709,16 +700,20 @@ def _normalized_document(
             "provider_limits": dict(envelope.provider_limits),
             **(
                 {
-                    "max_cpu_time_ms": envelope.max_cpu_time_ms,
-                    "max_peak_memory_bytes": envelope.max_peak_memory_bytes,
-                    "max_peak_vram_bytes": envelope.max_peak_vram_bytes,
-                    "max_storage_read_bytes": envelope.max_storage_read_bytes,
-                    "max_storage_write_bytes": envelope.max_storage_write_bytes,
-                    "max_network_ingress_bytes": envelope.max_network_ingress_bytes,
-                    "max_network_egress_bytes": envelope.max_network_egress_bytes,
-                    "available_bandwidth_bps": envelope.available_bandwidth_bps,
-                    "max_network_rtt_ms": envelope.max_network_rtt_ms,
-                    "max_egress_cost_microusd": envelope.max_egress_cost_microusd,
+                    field: value
+                    for field, value in {
+                        "max_cpu_time_ms": envelope.max_cpu_time_ms,
+                        "max_peak_memory_bytes": envelope.max_peak_memory_bytes,
+                        "max_peak_vram_bytes": envelope.max_peak_vram_bytes,
+                        "max_storage_read_bytes": envelope.max_storage_read_bytes,
+                        "max_storage_write_bytes": envelope.max_storage_write_bytes,
+                        "max_network_ingress_bytes": envelope.max_network_ingress_bytes,
+                        "max_network_egress_bytes": envelope.max_network_egress_bytes,
+                        "available_bandwidth_bps": envelope.available_bandwidth_bps,
+                        "max_network_rtt_ms": envelope.max_network_rtt_ms,
+                        "max_egress_cost_microusd": envelope.max_egress_cost_microusd,
+                    }.items()
+                    if value != MAX_RESOURCE_UNITS
                 }
                 if schema_version >= 2
                 else {}

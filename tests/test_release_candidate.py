@@ -651,6 +651,13 @@ def test_release_gate_tooling_is_directly_pinned(filename: str) -> None:
     assert requirements == sorted(requirements, key=str.casefold)
 
 
+def test_repository_normalizes_text_for_cross_platform_rebuilds() -> None:
+    root = Path(__file__).resolve().parents[1]
+    attributes = (root / ".gitattributes").read_text(encoding="utf-8").splitlines()
+
+    assert attributes == ["* text=auto eol=lf", "", "*.png binary"]
+
+
 def test_ci_has_cross_platform_tests_and_a_pinned_candidate_gate() -> None:
     import yaml
 
@@ -666,7 +673,7 @@ def test_ci_has_cross_platform_tests_and_a_pinned_candidate_gate() -> None:
     }
     assert {item["python-version"] for item in matrix} == {"3.11", "3.12", "3.13", "3.14"}
     coverage_entry = next(item for item in matrix if item["coverage"])
-    assert coverage_entry["extras"] == "dev,langgraph"
+    assert coverage_entry["extras"] == "dev,api,langgraph"
     uses = [
         step["uses"]
         for job in jobs.values()
@@ -674,6 +681,14 @@ def test_ci_has_cross_platform_tests_and_a_pinned_candidate_gate() -> None:
         if "uses" in step
     ]
     assert all(len(reference.rsplit("@", 1)[1].split()[0]) == 40 for reference in uses)
+    checkout_steps = [
+        step
+        for job in jobs.values()
+        for step in job["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    ]
+    assert checkout_steps
+    assert all(step.get("with", {}).get("persist-credentials") is False for step in checkout_steps)
     package_commands = "\n".join(
         str(step.get("run", "")) for step in jobs["package-candidate"]["steps"]
     )
@@ -683,8 +698,51 @@ def test_ci_has_cross_platform_tests_and_a_pinned_candidate_gate() -> None:
         "generate_release_candidate.py",
         "verify_release_candidate.py",
         "validate_sbom.py",
+        "validate_bandit.py",
+        "validate_licenses.py",
         "python -m pip_audit",
+        "python -m piplicenses",
+        "python -m bandit",
         "python -m pip freeze --all --exclude agent-physics",
         "python -m venv",
     ):
         assert required in package_commands
+    python_commands = "\n".join(str(step.get("run", "")) for step in jobs["python"]["steps"])
+    for required in (
+        "--cov-branch",
+        "--junitxml=artifacts/pytest-junit.xml",
+        "--strict-markers",
+        "xfail_strict=true",
+        "validate_junit.py",
+        "validate_coverage.py",
+        "--statement-floor 90",
+        "--branch-floor 80",
+        "run_live_load.py --output artifacts/live-load",
+        "run_live_load.py --verify-only artifacts/live-load",
+        "actionlint_1.7.12_linux_amd64.tar.gz",
+        "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
+    ):
+        assert required in python_commands
+    container_commands = "\n".join(
+        str(step.get("run", "")) for step in jobs["container"]["steps"]
+    )
+    for required in (
+        "aquasec/trivy@sha256:",
+        "--scanners vuln,misconfig,secret,license",
+        "--severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL",
+        "--read-only",
+        "--cap-drop ALL",
+        "no-new-privileges:true",
+        "--format cyclonedx",
+        "git archive --format=tar HEAD",
+    ):
+        assert required in container_commands
+    console_commands = "\n".join(
+        str(step.get("run", "")) for step in jobs["console"]["steps"]
+    )
+    for required in (
+        "--test-reporter=junit",
+        "validate_node_junit.mjs",
+        "npm audit --audit-level=low --json",
+    ):
+        assert required in console_commands

@@ -7,9 +7,10 @@ reducer for live control and call-free replay.
 
 The controller is intentionally narrow.  Provider 429/reset/capacity inputs are
 caller-supplied control facts, not live telemetry; workers are local callables;
-there are no hidden retries or external effects.  A crash-ambiguous in-flight
-reservation is charged at its full declared bound.  Optional work can then be
-shed, but protected mandatory work is never silently marked complete.
+there are no hidden retries, and declared writes stop at a durable effect intent.
+A crash-ambiguous in-flight reservation is charged at its full declared bound.
+Optional work can then be shed, but protected mandatory work is never silently
+marked complete.
 """
 
 from __future__ import annotations
@@ -23,8 +24,10 @@ from pathlib import Path
 from typing import Final
 
 from .contracts import BackendProfile, EffectClass, RunEnvelope, TaskContract
+from .effects import SQLiteEffectBroker, scoped_effect_idempotency_key
 from .graph import ExecutionGraph
 from .run_store import SQLiteRunStore, Usage
+from .scheduler import SchedulePolicy, Scheduler
 from .serialization import canonical_json, content_digest, normalize
 
 
@@ -39,6 +42,7 @@ ADAPTIVE_RUNTIME_SCOPE: Final[tuple[str, ...]] = (
     "componentwise token, cost-microusd, and context-byte protection",
     "caller-supplied provider reset/capacity and budget control facts",
     "full-reservation accounting for crash-ambiguous in-flight work",
+    "durable proposal-only handling for declared write effects",
 )
 
 ADAPTIVE_RUNTIME_LIMITATIONS: Final[tuple[str, ...]] = (
@@ -48,6 +52,7 @@ ADAPTIVE_RUNTIME_LIMITATIONS: Final[tuple[str, ...]] = (
     "SQLite is a single-database durability boundary, not distributed consensus",
     "controller transition and task-attempt appends are ordered but not one SQL transaction",
     "digest binding detects mutation but is not a producer signature",
+    "declared writes are proposed to the effect broker and never externally committed",
 )
 
 _SHA256_CHARS = frozenset("0123456789abcdef")
@@ -308,6 +313,64 @@ def _canonical_profile(task: TaskContract) -> BackendProfile:
             profile.name,
         ),
     )
+
+
+def plan_adaptive_admission(
+    graph: ExecutionGraph,
+    envelope: RunEnvelope,
+) -> tuple[dict[str, BackendProfile], tuple[str, ...]]:
+    """Return the exact scheduler-admitted profile set for the live controller.
+
+    The adaptive controller is deliberately single-flight.  In addition to the
+    scheduler's parallel admission proof, verify that its own deterministic
+    dispatch order meets every declared task and run deadline at p95.  Live
+    control may temporarily block an admitted provider, but it may never switch
+    to an unproved fallback profile.
+    """
+
+    admission = Scheduler().schedule(graph, envelope, SchedulePolicy.ADAPTIVE)
+    if not admission.success:
+        raise AdaptiveInvariantError(
+            admission.failure_reason or "adaptive admission refused run"
+        )
+    by_id = graph.by_id
+    profiles: dict[str, BackendProfile] = {}
+    for entry in admission.entries:
+        matches = tuple(
+            profile
+            for profile in by_id[entry.task_id].profiles
+            if profile.name == entry.backend and profile.provider == entry.provider
+        )
+        if len(matches) != 1:
+            raise AdaptiveInvariantError(
+                f"admission selected unknown profile for task {entry.task_id!r}"
+            )
+        profiles[entry.task_id] = matches[0]
+    skipped = tuple(sorted(admission.skipped))
+    if set(profiles) != set(by_id) - set(skipped):
+        raise AdaptiveInvariantError("adaptive admission produced an incomplete execution plan")
+
+    pending = set(profiles)
+    completed: set[str] = set()
+    now_ms = 0
+    while pending:
+        ready = [
+            by_id[task_id]
+            for task_id in pending
+            if set(by_id[task_id].dependencies) <= completed
+        ]
+        if not ready:
+            raise AdaptiveInvariantError("adaptive single-flight plan has no ready task")
+        task = min(ready, key=lambda item: (-item.value, item.task_id))
+        now_ms += profiles[task.task_id].duration_ms_p95
+        deadline_ms = min(task.deadline_ms or envelope.deadline_ms, envelope.deadline_ms)
+        if now_ms > deadline_ms:
+            raise AdaptiveInvariantError(
+                f"adaptive single-flight admission misses deadline for task {task.task_id!r}"
+            )
+        pending.remove(task.task_id)
+        completed.add(task.task_id)
+    return profiles, skipped
 
 
 @dataclass(frozen=True, slots=True)
@@ -918,14 +981,29 @@ def _make_state(
 
 
 class _AdaptiveControllerModel:
-    def __init__(self, graph: ExecutionGraph, envelope: RunEnvelope, run_id: str) -> None:
-        _validate_runtime_inputs(graph, envelope, run_id)
+    def __init__(
+        self,
+        graph: ExecutionGraph,
+        envelope: RunEnvelope,
+        run_id: str,
+        *,
+        allow_write_effects: bool = False,
+    ) -> None:
+        _validate_runtime_inputs(
+            graph,
+            envelope,
+            run_id,
+            allow_write_effects=allow_write_effects,
+        )
         self.graph = graph
         self.envelope = envelope
         self.run_id = run_id
         self.graph_digest = content_digest(graph)
         self.by_id = graph.by_id
-        self.providers = {profile.provider for task in graph.tasks for profile in task.profiles}
+        admitted, skipped = plan_adaptive_admission(graph, envelope)
+        self.admitted_profiles = admitted
+        self.admission_skipped = frozenset(skipped)
+        self.providers = {profile.provider for profile in admitted.values()}
         self.protected = self._protected_task_ids()
 
     def _protected_task_ids(self) -> frozenset[str]:
@@ -948,7 +1026,7 @@ class _AdaptiveControllerModel:
             "settled": Usage(),
             "unknown_usage": Usage(),
             "completed": set(),
-            "shed": set(),
+            "shed": set(self.admission_skipped),
             "unknown_tasks": set(),
             "inflight": [],
             "resets": {},
@@ -999,7 +1077,7 @@ class _AdaptiveControllerModel:
         inflight_ids = {item.task_id for item in inflight}
         return _usage_add(
             *(
-                _profile_usage(_canonical_profile(self.by_id[task_id]))
+                _profile_usage(self.admitted_profiles[task_id])
                 for task_id in sorted(self.protected - completed - inflight_ids)
             )
         )
@@ -1032,6 +1110,34 @@ class _AdaptiveControllerModel:
             values["status"] = AdaptiveStatus.REFUSED
             return
 
+        inflight_ids = {item.task_id for item in inflight}
+        deadline_completed = completed | inflight_ids
+        deadline_now_ms = int(values["now_ms"])
+        for reservation in inflight:
+            profile = self.admitted_profiles[reservation.task_id]
+            deadline_now_ms += profile.duration_ms_p95
+            task = self.by_id[reservation.task_id]
+            task_deadline_ms = min(
+                task.deadline_ms or self.envelope.deadline_ms,
+                self.envelope.deadline_ms,
+            )
+            if deadline_now_ms > task_deadline_ms:
+                values["status"] = AdaptiveStatus.REFUSED
+                return
+        pending_protected = self.protected - deadline_completed
+        if not self._serial_deadlines_fit(
+            completed=deadline_completed,
+            included=pending_protected,
+            now_ms=deadline_now_ms,
+        ):
+            shed.update(
+                task_id
+                for task_id in self.admitted_profiles
+                if task_id not in self.protected and task_id not in completed
+            )
+            values["status"] = AdaptiveStatus.REFUSED
+            return
+
         committed = _usage_add(settled, unknown_usage, self._inflight_usage(inflight))
         mandatory = self._pending_mandatory_usage(completed, inflight)
         if not _usage_fits(_usage_add(committed, mandatory), caps):
@@ -1049,7 +1155,8 @@ class _AdaptiveControllerModel:
         optional_candidates = [
             task
             for task in self.graph.tasks
-            if task.task_id not in self.protected
+            if task.task_id in self.admitted_profiles
+            and task.task_id not in self.protected
             and task.task_id not in completed
             and task.task_id not in shed
             and task.task_id not in {item.task_id for item in inflight}
@@ -1057,9 +1164,13 @@ class _AdaptiveControllerModel:
         selected_usage = Usage()
         selected: set[str] = set()
         for task in sorted(optional_candidates, key=lambda item: (-item.value, item.task_id)):
-            usage = _profile_usage(_canonical_profile(task))
+            usage = _profile_usage(self.admitted_profiles[task.task_id])
             candidate = _usage_add(selected_usage, usage)
-            if _usage_fits(candidate, headroom):
+            if _usage_fits(candidate, headroom) and self._serial_deadlines_fit(
+                completed=deadline_completed,
+                included=pending_protected | selected | {task.task_id},
+                now_ms=deadline_now_ms,
+            ):
                 selected.add(task.task_id)
                 selected_usage = candidate
             else:
@@ -1080,32 +1191,61 @@ class _AdaptiveControllerModel:
         elif values["status"] is not AdaptiveStatus.REFUSED:
             values["status"] = AdaptiveStatus.RUNNING
 
+    def _serial_deadlines_fit(
+        self,
+        *,
+        completed: set[str],
+        included: set[str] | frozenset[str],
+        now_ms: int,
+    ) -> bool:
+        pending = set(included) - completed
+        simulated_completed = set(completed)
+        while pending:
+            ready = [
+                self.by_id[task_id]
+                for task_id in pending
+                if set(self.by_id[task_id].dependencies) <= simulated_completed
+            ]
+            if not ready:
+                return False
+            task = min(ready, key=lambda item: (-item.value, item.task_id))
+            now_ms += self.admitted_profiles[task.task_id].duration_ms_p95
+            deadline_ms = min(
+                task.deadline_ms or self.envelope.deadline_ms,
+                self.envelope.deadline_ms,
+            )
+            if now_ms > deadline_ms:
+                return False
+            pending.remove(task.task_id)
+            simulated_completed.add(task.task_id)
+        return True
+
     def _available_profile(self, task: TaskContract, state: AdaptiveState) -> BackendProfile | None:
         resets = dict(state.provider_resets)
         capacities = dict(state.provider_capacities)
-        candidates = [
-            profile
-            for profile in task.profiles
-            if profile.quality >= task.min_quality
-            and profile.provider not in resets
-            and capacities.get(profile.provider, self.envelope.provider_limit(profile.provider)) > 0
-        ]
-        if not candidates:
-            return None
-        return min(
-            candidates,
-            key=lambda profile: (
-                profile.total_tokens,
-                profile.cost_microusd,
-                profile.context_bytes,
-                profile.duration_ms_p95,
+        profile = self.admitted_profiles.get(task.task_id)
+        if (
+            profile is None
+            or profile.provider in resets
+            or capacities.get(
                 profile.provider,
-                profile.name,
-            ),
-        )
+                self.envelope.provider_limit(profile.provider),
+            )
+            <= 0
+        ):
+            return None
+        return profile
 
-    def _dispatch_choices(self, state: AdaptiveState) -> list[tuple[TaskContract, BackendProfile]]:
+    def _dispatch_choices(
+        self,
+        state: AdaptiveState,
+        *,
+        occurred_at_ms: int | None = None,
+    ) -> list[tuple[TaskContract, BackendProfile]]:
         if state.status is not AdaptiveStatus.RUNNING or state.inflight:
+            return []
+        dispatch_at_ms = state.now_ms if occurred_at_ms is None else occurred_at_ms
+        if type(dispatch_at_ms) is not int or dispatch_at_ms < state.now_ms:
             return []
         completed = set(state.completed_task_ids)
         excluded = completed | set(state.shed_task_ids)
@@ -1121,16 +1261,35 @@ class _AdaptiveControllerModel:
             pending_protected = self.protected - completed - {task.task_id}
             protected_reserve = _usage_add(
                 *(
-                    _profile_usage(_canonical_profile(self.by_id[task_id]))
+                    _profile_usage(self.admitted_profiles[task_id])
                     for task_id in sorted(pending_protected)
                 )
             )
-            if _usage_fits(_usage_add(candidate_committed, protected_reserve), state.caps):
+            if not _usage_fits(_usage_add(candidate_committed, protected_reserve), state.caps):
+                continue
+            completed_at_ms = dispatch_at_ms + profile.duration_ms_p95
+            task_deadline_ms = min(
+                task.deadline_ms or self.envelope.deadline_ms,
+                self.envelope.deadline_ms,
+            )
+            if completed_at_ms > task_deadline_ms:
+                continue
+            remaining = set(self.admitted_profiles) - excluded - {task.task_id}
+            if self._serial_deadlines_fit(
+                completed=completed | {task.task_id},
+                included=remaining,
+                now_ms=completed_at_ms,
+            ):
                 choices.append((task, profile))
         return choices
 
-    def next_dispatch(self, state: AdaptiveState) -> tuple[str, BackendProfile] | None:
-        choices = self._dispatch_choices(state)
+    def next_dispatch(
+        self,
+        state: AdaptiveState,
+        *,
+        occurred_at_ms: int | None = None,
+    ) -> tuple[str, BackendProfile] | None:
+        choices = self._dispatch_choices(state, occurred_at_ms=occurred_at_ms)
         if not choices:
             return None
         task, profile = min(choices, key=lambda item: (-item[0].value, item[0].task_id))
@@ -1206,7 +1365,7 @@ class _AdaptiveControllerModel:
             reason = "budget_cut_applied"
         elif event.kind is AdaptiveEventKind.TASK_DISPATCHED:
             action = AdaptiveAction.DISPATCH
-            expected = self.next_dispatch(prior)
+            expected = self.next_dispatch(prior, occurred_at_ms=event.occurred_at_ms)
             if expected is None:
                 raise AdaptiveInvariantError("no task is currently eligible for dispatch")
             expected_task_id, profile = expected
@@ -1366,7 +1525,13 @@ class _AdaptiveControllerModel:
             raise AdaptiveInvariantError(f"control event names unknown provider {provider!r}")
 
 
-def _validate_runtime_inputs(graph: ExecutionGraph, envelope: RunEnvelope, run_id: str) -> None:
+def _validate_runtime_inputs(
+    graph: ExecutionGraph,
+    envelope: RunEnvelope,
+    run_id: str,
+    *,
+    allow_write_effects: bool = False,
+) -> None:
     if type(graph) is not ExecutionGraph or type(graph.tasks) is not tuple:
         raise AdaptiveInvariantError("graph must use the exact immutable ExecutionGraph contract")
     if type(envelope) is not RunEnvelope:
@@ -1391,7 +1556,7 @@ def _validate_runtime_inputs(graph: ExecutionGraph, envelope: RunEnvelope, run_i
             raise AdaptiveInvariantError("runtime tasks and profiles must use exact contracts")
         if not math.isfinite(task.value):
             raise AdaptiveInvariantError("task value must be finite")
-        if task.effect.kind not in {EffectClass.PURE, EffectClass.READ}:
+        if task.effect.kind not in {EffectClass.PURE, EffectClass.READ} and not allow_write_effects:
             raise AdaptiveInvariantError(
                 "adaptive fixture runtime refuses write effects; use the durable effect kernel"
             )
@@ -1410,7 +1575,9 @@ def replay_adaptive_records(
 ) -> AdaptiveReplayReport:
     """Replay controller records without invoking a worker or provider."""
 
-    model = _AdaptiveControllerModel(graph, envelope, run_id)
+    # Replay never executes an effect. It can therefore verify controller
+    # records for effect-bearing graphs without needing a broker or adapter.
+    model = _AdaptiveControllerModel(graph, envelope, run_id, allow_write_effects=True)
     state = model.initial_state()
     seen_event_ids: set[str] = set()
     record_digests: list[str] = []
@@ -1463,6 +1630,7 @@ class AdaptiveRuntime:
         *,
         run_id: str,
         workers: Mapping[str, AdaptiveWorker],
+        effect_broker: SQLiteEffectBroker | None = None,
         crash_after_dispatch_task_ids: Iterable[str] = (),
     ) -> None:
         self.store = store
@@ -1470,8 +1638,14 @@ class AdaptiveRuntime:
         self.envelope = envelope
         self.run_id = run_id
         self._workers = dict(workers)
+        self._effect_broker = effect_broker
         self._crash_after_dispatch = set(crash_after_dispatch_task_ids)
-        self._model = _AdaptiveControllerModel(graph, envelope, run_id)
+        self._model = _AdaptiveControllerModel(
+            graph,
+            envelope,
+            run_id,
+            allow_write_effects=effect_broker is not None,
+        )
         graph_digest = self._model.graph_digest
         envelope_record = {
             "runtime_schema": ADAPTIVE_RUNTIME_SCHEMA_VERSION,
@@ -1608,7 +1782,7 @@ class AdaptiveRuntime:
         )
 
     def dispatch_next(self, *, occurred_at_ms: int) -> str | None:
-        choice = self._model.next_dispatch(self.state)
+        choice = self._model.next_dispatch(self.state, occurred_at_ms=occurred_at_ms)
         if choice is None:
             return None
         task_id, profile = choice
@@ -1641,33 +1815,86 @@ class AdaptiveRuntime:
             raise SimulatedAdaptiveCrash(
                 f"simulated coordinator crash after dispatching {task_id!r}"
             )
-        worker = self._workers.get(task_id)
-        if worker is None:
-            self.recover_unknown_inflight(occurred_at_ms=occurred_at_ms)
-            raise AdaptiveInvariantError(f"task {task_id!r} has no local worker")
         completed_outputs = {
             key: value.output for key, value in self.store.completed_tasks(self.run_id).items()
         }
         task = self.graph.by_id[task_id]
-        context = AdaptiveTaskContext(
-            run_id=self.run_id,
-            task_id=task_id,
-            attempt=1,
-            provider=profile.provider,
-            backend=profile.name,
-            dependency_outputs={key: completed_outputs[key] for key in task.dependencies},
-        )
-        try:
-            result = worker(context)
-        except Exception:
-            self.recover_unknown_inflight(occurred_at_ms=occurred_at_ms)
-            raise
+        if task.effect.kind.writes:
+            broker = self._effect_broker
+            if broker is None:  # pragma: no cover - rejected during model construction
+                self.recover_unknown_inflight(occurred_at_ms=occurred_at_ms)
+                raise AdaptiveInvariantError("write effect has no durable broker")
+            try:
+                intent = broker.propose(
+                    run_id=self.run_id,
+                    action=task_id,
+                    resource=task.effect.resource,
+                    effect_class=task.effect.kind,
+                    idempotency_key=scoped_effect_idempotency_key(
+                        run_id=self.run_id,
+                        task_id=task.task_id,
+                        attempt=started.attempt,
+                        declared_key=task.effect.idempotency_key,
+                    ),
+                    payload={
+                        "task_id": task_id,
+                        "declared_idempotency_key": task.effect.idempotency_key,
+                        "dependency_outputs": {
+                            key: completed_outputs[key] for key in task.dependencies
+                        },
+                        "fixture_only": True,
+                    },
+                    compensation_action=task.effect.compensation,
+                )
+                result = AdaptiveWorkerResult(
+                    output={
+                        "effect_intent_id": intent.intent_id,
+                        "effect_state": intent.state.value,
+                        "declared_idempotency_key": task.effect.idempotency_key,
+                        "executed_externally": False,
+                    },
+                    actual_usage=Usage(),
+                    duration_ms=0,
+                )
+            except Exception:
+                self.recover_unknown_inflight(occurred_at_ms=occurred_at_ms)
+                raise
+            output_kind = "effect_intent"
+        else:
+            worker = self._workers.get(task_id)
+            if worker is None:
+                self.recover_unknown_inflight(occurred_at_ms=occurred_at_ms)
+                raise AdaptiveInvariantError(f"task {task_id!r} has no local worker")
+            context = AdaptiveTaskContext(
+                run_id=self.run_id,
+                task_id=task_id,
+                attempt=1,
+                provider=profile.provider,
+                backend=profile.name,
+                dependency_outputs={key: completed_outputs[key] for key in task.dependencies},
+            )
+            try:
+                result = worker(context)
+            except Exception:
+                self.recover_unknown_inflight(occurred_at_ms=occurred_at_ms)
+                raise
+            output_kind = "adaptive_fixture_output"
         if type(result) is not AdaptiveWorkerResult:
             self.recover_unknown_inflight(occurred_at_ms=occurred_at_ms)
             raise AdaptiveInvariantError("worker must return AdaptiveWorkerResult")
         if not _usage_fits(result.actual_usage, reservation):
             self.recover_unknown_inflight(occurred_at_ms=occurred_at_ms + result.duration_ms)
             raise AdaptiveInvariantError("worker actual usage exceeds its dispatch reservation")
+        settled_at_ms = occurred_at_ms + result.duration_ms
+        task_deadline_ms = min(
+            task.deadline_ms or self.envelope.deadline_ms,
+            self.envelope.deadline_ms,
+        )
+        if settled_at_ms > task_deadline_ms:
+            self.recover_unknown_inflight(occurred_at_ms=settled_at_ms)
+            raise AdaptiveInvariantError(
+                f"task {task_id!r} completed after its declared deadline"
+            )
         self.store.complete_attempt(
             run_id=self.run_id,
             task_id=task_id,
@@ -1676,12 +1903,12 @@ class AdaptiveRuntime:
             estimated=reservation,
             reserved=reservation,
             actual=result.actual_usage,
-            output_kind="adaptive_fixture_output",
+            output_kind=output_kind,
         )
         settlement = AdaptiveControlEvent.create(
             self._event_id(AdaptiveEventKind.USAGE_SETTLED),
             AdaptiveEventKind.USAGE_SETTLED,
-            occurred_at_ms + result.duration_ms,
+            settled_at_ms,
             {
                 "task_id": task_id,
                 "attempt": 1,
