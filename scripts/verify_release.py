@@ -29,6 +29,25 @@ PYTHON_COVERAGE = ROOT / "artifacts" / "release-coverage.json"
 PYTHON_LICENSES = ROOT / "artifacts" / "release-licenses.json"
 
 
+def _prepare_output_directories(args: argparse.Namespace) -> None:
+    """Create every parent consumed directly by a third-party command."""
+
+    outputs = (
+        CONSOLE_JUNIT,
+        LIVE_LOAD,
+        PYTHON_AUDIT,
+        PYTHON_AUDIT_REQUIREMENTS,
+        PYTHON_BANDIT,
+        PYTHON_JUNIT,
+        PYTHON_COVERAGE,
+        PYTHON_LICENSES,
+        args.output.resolve(),
+        args.raw_experiments.resolve(),
+    )
+    for output in outputs:
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+
 class VerificationFailure(RuntimeError):
     """One named release-candidate check failed."""
 
@@ -149,6 +168,7 @@ def _perform_checks(
     git: str,
     checks: list[dict[str, object]],
 ) -> tuple[Path, Path]:
+    _prepare_output_directories(args)
     checks.append(
         _run(
             "regenerate digest-bound console artifact",
@@ -239,7 +259,6 @@ def _perform_checks(
             [python, "scripts/run_live_load.py", "--verify-only", str(LIVE_LOAD)],
         )
     )
-    PYTHON_AUDIT.parent.mkdir(parents=True, exist_ok=True)
     checks.append(
         _capture(
             "capture resolved all-extras dependency set",
