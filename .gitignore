@@ -10,6 +10,8 @@ htmlcov/
 venv/
 dist/
 build/
+!apps/physics-console/build/
+!apps/physics-console/build/sites-vite-plugin.ts
 .env
 .env.*
 !.env.example

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import runpy
+import subprocess
 from pathlib import Path
 
 
@@ -35,3 +36,17 @@ def test_release_verifier_prepares_all_fresh_clone_output_parents(
         assert namespace[name].parent.is_dir()
     assert args.output.parent.is_dir()
     assert args.raw_experiments.parent.is_dir()
+
+
+def test_console_local_build_plugin_is_committed_for_fresh_clones() -> None:
+    root = Path(__file__).parents[1]
+    plugin = root / "apps" / "physics-console" / "build" / "sites-vite-plugin.ts"
+
+    assert plugin.is_file()
+    subprocess.run(
+        ["git", "ls-files", "--error-unmatch", plugin.relative_to(root).as_posix()],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
