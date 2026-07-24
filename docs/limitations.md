@@ -107,6 +107,9 @@ it does not turn fixture, simulated, estimated, private, or human-unverified evi
 
 - Hashes are tamper-evident identities, not signatures or trusted timestamps. Authenticity requires
   an immutable public commit/tag or another trusted attestation.
+- Production Survival timing comes from deterministic local fixtures and local SQLite. Its
+  descriptive `pass^k`, recovery latency, and orchestration overhead do not measure live providers,
+  distributed workers, sandbox startup, model correctness, or production infrastructure.
 - The whole-run verifier is separate from live planner state in code and inputs, but ships in the
   same Python distribution; it is not an independently administered third-party audit.
 - Coverage supports test evidence but does not prove missing semantics or external integrations.
@@ -125,8 +128,20 @@ it does not turn fixture, simulated, estimated, private, or human-unverified evi
   executed on the non-equivalent StormShift orchestration workload. `not-executed` is not zero.
 - LangChain ecosystem breadth, integrations, hosted LangSmith capabilities, and user adoption are
   outside this repository's comparison proof.
+- τ-bench/τ²/τ³, BFCL, SWE-bench Verified, and Terminal-bench are not executed. The first two need
+  a pinned paired live-model protocol; the code-execution suites additionally require a hardened
+  hostile-code sandbox that FINITE does not yet implement.
 - Any statistical headline must come from the preregistered contract, include failures, publish raw
   records, and pass its threshold. Negative or baseline wins must remain visible.
+
+## Enterprise and compliance limits
+
+- FINITE has no SOC 2 report, ISO 27001 certificate, or independently audited control period.
+- No SAML, SCIM, tenant RBAC, customer VPC/BYOC, managed key custody, legal hold, regulated
+  retention, WORM storage, or SEC/FINRA compliance attestation is implemented.
+- Append-only local events and content digests are engineering primitives, not a regulated
+  recordkeeping service. Any future Rule 17a-4 language must remain `aligned` or `designed for`
+  until counsel and independent validation support a stronger claim.
 
 ## StormShift and public-safety boundary
 

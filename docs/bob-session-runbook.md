@@ -9,7 +9,7 @@ and release review - not a branding trail.
 1. Install the repository in the Python environment Bob launches:
    `python -m pip install -e ".[dev,mcp,api]"`.
 2. Open this repository as the Bob workspace and review `.bob/mcp.json` plus Bob's MCP panel.
-3. Confirm `finite-agent-physics` starts and exposes 22 tools with none globally auto-approved.
+3. Confirm `finite-agent-physics` starts and exposes 23 tools with none globally auto-approved.
 4. Record the starting branch and exact commit.
 5. Capture timestamped screen recording or screenshots showing Bob, prompts, tool calls, changed
    files, and verification output; keep account/personal evidence private until redacted.
@@ -41,8 +41,9 @@ Ask Bob to use MCP, not pasted terminal output:
 > `max_tokens=1`; confirm the refusal makes zero external calls. Start the bundled fixture with
 > `finite_run`. Preserve its run ID, poll `finite_status`, call `finite_explain_run`, and finish with
 > `finite_verify_run` for the same ID. Then call the physical-admission, adaptive-recovery,
-> framework-conformance, and artifact-integrity drills. Explain every simulation, fixture, live,
-> estimated, unsupported, and not-executed label. Do not approve or commit an external effect.
+> production-survival, framework-conformance, and artifact-integrity drills. Explain every
+> simulation, fixture, live, estimated, unsupported, and not-executed label. Do not approve or
+> commit an external effect.
 
 Acceptance:
 

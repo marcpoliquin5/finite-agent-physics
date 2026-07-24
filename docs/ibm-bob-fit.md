@@ -31,7 +31,7 @@ boundary demonstrated by this repository and its MCP seam.
 
 ## Bob-facing lifecycle
 
-The 22-tool server includes one coherent lifecycle:
+The 23-tool server includes one coherent lifecycle:
 
 ```text
 finite_capabilities

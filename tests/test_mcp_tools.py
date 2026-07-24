@@ -15,6 +15,7 @@ from agent_physics.mcp_server import (
     finite_framework_conformance_drill,
     finite_physical_admission_drill,
     finite_preflight,
+    finite_production_survival_drill,
     finite_run,
     finite_status,
     finite_quota_corpus,
@@ -30,7 +31,7 @@ from agent_physics.mcp_server import (
 def test_mcp_capability_statement_is_explicit_about_live_boundary() -> None:
     payload = finite_capabilities()
     assert payload["stage"] == "durable-local-and-live-ready"
-    assert payload["tool_count"] == 22
+    assert payload["tool_count"] == 23
     assert len(payload["tools"]) == payload["tool_count"]
     assert len(set(payload["tools"])) == payload["tool_count"]
     assert payload["boundaries"] == {
@@ -259,6 +260,22 @@ def test_adaptive_recovery_drill_executes_crash_restart_and_call_free_replay() -
     assert result["controller_record_count"] == 14
     assert result["external_provider_calls"] == 0
     assert result["external_effects_possible"] is False
+
+
+def test_production_survival_drill_repeats_all_faults_without_external_calls() -> None:
+    result = finite_production_survival_drill()
+
+    assert result["verified"] is True
+    assert result["measurement_kind"] == "local-deterministic-fault-injection"
+    assert result["total_trials"] == 18
+    assert result["total_passes"] == 18
+    assert result["all_trials_observed_passed"] is True
+    assert result["external_provider_calls"] == 0
+    assert result["duplicate_effect_applications"] == 0
+    assert result["record_count"] == 18
+    assert result["raw_records_returned"] is False
+    assert len(result["scenario_summaries"]) == 6
+    assert all(summary["all_k_observed"] for summary in result["scenario_summaries"])
 
 
 def test_framework_conformance_drill_is_actual_pinned_evidence_or_honest_unavailability() -> None:

@@ -55,7 +55,7 @@ Strong evidence in the current worktree includes:
   measured seeds per executed system, plus a hard metric-free PageAgent boundary;
 - an independent sealed whole-run verifier;
 - a bearer-protected local REST/SSE interface; and
-- a 22-tool Bob-compatible MCP surface plus a watsonx worker tested with fake inference.
+- a 23-tool Bob-compatible MCP surface plus a watsonx worker tested with fake inference.
 
 The candidate contains no genuine Bob session entry in `docs/bob-build-log.md`, no redacted
 live-Granite receipt, no public GitHub/tag/CI evidence, no public API, no live faulted
@@ -110,7 +110,7 @@ work appears straightforward.
 | M27 | Pass | Compiler-visible adapter requirements and executor admission enforce cancellation, checkpoint, streaming, usage, supported effects, fencing, and hidden-retry bounds before dispatch. | Remote adapter attestation is not claimed. |
 | M28 | Partial | Seeded benchmarks, quota traces, replans, and scheduler explanations replay deterministically in their subsystems. | One input-event-driven simulator with unified decision and trace hashes is absent. |
 | M29 | Partial / External-blocked | The watsonx worker runs inside durable executor state, requires provider usage, validates a public receipt, and resumes without recall in fake-inference tests. | Capture one genuine live-watsonx receipt bound to the release run and commit. |
-| M30 | Partial / External-blocked | Twenty-two local MCP tools and a real STDIO handshake are tested; durable preflight/run/status/explain/verify exists. | Capture those calls in one genuine IBM Bob session with preserved run/trace/commit evidence. |
+| M30 | Partial / External-blocked | Twenty-three local MCP tools and a real STDIO handshake are tested; durable preflight/run/status/explain/verify and Production Survival drills exist. | Capture those calls in one genuine IBM Bob session with preserved run/trace/commit evidence. |
 | M31 | Pass | Health/readiness plus bearer-protected local lifecycle, start-paused controls, zero-call replay, approval, caps, and resumable SSE operate over durable state. A digest-bound default load proof independently re-verifies 64 real-loopback runs, effect isolation, and zero external commits/calls during replay. | This is local fixture evidence, not a hosted-capacity claim; public hosting, TLS termination, OIDC, tenant RBAC, distributed rate limits, and HA are not claimed. |
 | M32 | Partial | The sealed/live-aware console renders DAG/Gantt/critical path, logical/physical pressure, protected budgets, effects, and replay evidence. A local desktop/mobile browser flow exercises paused launch, controls, resume, SSE, replay, and run-scoped effect inspection without console/request errors. | The Sites URL is owner-only and the complete judge-accessible hosted path and assistive-technology audit are unverified. |
 | M33 | Pass | `decision_explanations.py` and its tests bind one public-fact/rule-ID record to every deterministic scheduler event, including completion and refusal, with reasoning access explicitly false. | Other planes need comparable explanations, but the scheduler gate passes. |
@@ -153,7 +153,7 @@ work appears straightforward.
 
 | ID | Status | Evidence present | Exact missing proof |
 |---|---|---|---|
-| R01 | Partial / External-blocked | The 22-tool MCP surface, durable lifecycle, and watsonx worker seam exist. | One genuine Bob session and same-run live-Granite receipt must bind every R01 field. |
+| R01 | Partial / External-blocked | The 23-tool MCP surface, durable lifecycle, Production Survival drill, and watsonx worker seam exist. | One genuine Bob session and same-run live-Granite receipt must bind every R01 field. |
 | R02 | Pass | One deterministic drill settles two tasks, applies 429/reset/capacity and budget-cut events, crashes with unknown in-flight use, restarts without recall, protects mandatory work, and reproduces the control digest call-free. | Local fixture/control inputs only; no live-provider claim. |
 | R03 | Pass | The independent whole-run verifier consumes sealed evidence only and checks identity, ordering, conservation, artifacts/claims, context, approvals, effects, and replay; mutation classes fail closed. | Digests are not signatures or producer authentication. |
 | R04 | Pass | Typed CPU, RAM/VRAM, storage, network bytes, bandwidth, RTT, egress, overflow, and transport-path bounds participate in admission; the coverage matrix labels energy unsupported. | Values are declared estimates, not runtime measurements. |
@@ -346,7 +346,7 @@ private Bob/provider content must never be committed.
   ambiguity, outbox, and compensation rules.
 - Its bounded semantic verifier catches the registered controlled-fact, freshness, URL,
   authority-taint, bilingual, and static-accessibility mutations.
-- Its local REST/SSE and 22-tool MCP surfaces are tested; this is not public deployment or Bob use.
+- Its local REST/SSE and 23-tool MCP surfaces are tested; this is not public deployment or Bob use.
 - Its neutral/LangGraph wrapper evidence records preserved semantics and explicit losses; PageAgent
   remains not executed and metric-free.
 

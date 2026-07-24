@@ -96,10 +96,11 @@ mcp_server.main()
                     "finite_decision_explanation_drill",
                     "finite_physical_admission_drill",
                     "finite_adaptive_recovery_drill",
+                    "finite_production_survival_drill",
                     "finite_framework_conformance_drill",
                     "finite_artifact_integrity_drill",
                 } == names
-                assert len(tools.tools) == 22
+                assert len(tools.tools) == 23
 
                 run_id = "finite-stdio-all-tools-v5"
                 calls: tuple[tuple[str, dict[str, object]], ...] = (
@@ -145,6 +146,10 @@ mcp_server.main()
                     ),
                     ("finite_physical_admission_drill", {}),
                     ("finite_adaptive_recovery_drill", {}),
+                    (
+                        "finite_production_survival_drill",
+                        {"trials_per_scenario": 3, "seed_base": 5_000},
+                    ),
                     ("finite_framework_conformance_drill", {}),
                     ("finite_artifact_integrity_drill", {}),
                 )
@@ -184,6 +189,13 @@ mcp_server.main()
                 assert payloads["finite_executor_drill"]["model_calls_made"] is False
                 assert payloads["finite_fault_experiment"]["external_systems_called"] is False
                 assert payloads["finite_adaptive_recovery_drill"]["external_provider_calls"] == 0
+                assert payloads["finite_production_survival_drill"]["verified"] is True
+                assert (
+                    payloads["finite_production_survival_drill"][
+                        "duplicate_effect_applications"
+                    ]
+                    == 0
+                )
                 assert payloads["finite_artifact_integrity_drill"]["proof_passed"] is True
 
         assert (state_directory / "external-io-guard.active").read_text(encoding="utf-8") == (

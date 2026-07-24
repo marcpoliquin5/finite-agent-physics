@@ -27,7 +27,7 @@ test("server-renders the FINITE evidence console", async () => {
   assert.match(html, /STORMSHIFT/);
   assert.match(html, /NO EXTERNAL WRITE/);
   assert.match(html, /ARTIFACT\s*(?:<!-- -->)?\s*CHECKING/);
-  assert.match(html, /BOB MCP -\s*(?:<!-- -->)?\s*22\s*(?:<!-- -->)?\s*TOOLS/);
+  assert.match(html, /BOB MCP -\s*(?:<!-- -->)?\s*23\s*(?:<!-- -->)?\s*TOOLS/);
   assert.match(html, /Eighteen signals/);
   assert.match(html, /V5 INVARIANT STACK/);
   assert.match(html, /OPTIONAL LIVE CONTROL PLANE/);
@@ -58,7 +58,7 @@ test("removes disposable starter assets and consumes a verified kernel artifact"
   assert.equal(payload.registered_fault_experiment.raw_record_count, 450);
   assert.equal(payload.registered_fault_experiment.paired_seed_count, 30);
   assert.equal(payload.registered_fault_experiment.revision_provenance, "caller-supplied-unverified");
-  assert.equal(payload.bob_mcp_tool_count, 22);
+  assert.equal(payload.bob_mcp_tool_count, 23);
   assert.equal(payload.release_generation, "v5");
   assert.equal(payload.physical_resource_admission.declared_physical_cap_count, 10);
   assert.equal(payload.bounded_semantic_safety.adversarial_refused_count, 16);

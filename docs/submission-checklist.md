@@ -21,7 +21,7 @@ entrant. No agent may infer or fabricate them.
 
 ### B. IBM Bob and Granite
 
-- [x] **06** Bob-compatible STDIO MCP configuration and 22-tool protocol surface are committed and tested.
+- [x] **06** Bob-compatible STDIO MCP configuration and 23-tool protocol surface are committed and tested.
 - [ ] **07** A genuine timestamped Bob session makes a substantive planning, coding, or testing contribution.
 - [ ] **08** Bob calls preflight, run, status, explain, and verify for one run ID at the release commit.
 - [ ] **09** A real Granite model runs through watsonx.ai with SDK retries disabled and complete settlement use.
@@ -77,7 +77,7 @@ entrant. No agent may infer or fabricate them.
 
 ### I. GitHub, video, and project page
 
-- [ ] **41** Public GitHub repository contains the reviewed branch, license, security policy, and contribution path.
+- [x] **41** Public GitHub repository contains the reviewed branch, license, security policy, and contribution path.
 - [ ] **42** Immutable release commit and annotated tag match the candidate manifest and generated asset hashes.
 - [ ] **43** Public video is in English, captioned, legible, accurate, and no more than three minutes.
 - [ ] **44** Project page explains problem, solution, architecture, impact, theme fit, and genuine Bob use.
@@ -108,8 +108,8 @@ deployment by Miami-Dade County or any external agency.
 
 ## Recommended freeze order
 
-1. Finish fair-benchmark validation and generate the local release candidate.
-2. Authenticate GitHub, publish the reviewed branch, and let CI run at the exact commit.
+1. Finish fair-benchmark and Production Survival validation and generate the local release candidate.
+2. Publish the reviewed Bob-ready branch and let CI run at the exact commit.
 3. Complete a substantive Bob work package and the same-run MCP lifecycle.
 4. Run one live Granite task through FINITE and preserve the redacted receipt.
 5. Configure judge access, verify the UI/API from the intended unauthenticated or shared account.

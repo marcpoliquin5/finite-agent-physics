@@ -662,7 +662,7 @@ export default function Home() {
   return (
     <main className="console-shell">
       <header className="topbar">
-        <div className="brand-lockup" aria-label="FINITE Agent Physics">
+        <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
           <div>
             <strong>FINITE</strong>
@@ -742,11 +742,11 @@ export default function Home() {
               <span className="panel-kicker">PINNED MODEL WITNESS</span>
               <h2>{witness.label}</h2>
             </div>
-            <div className="legend" aria-label="Timeline legend">
+            <section className="legend" aria-label="Timeline legend">
               <span><i className="legend-fixture" /> fixture</span>
               <span><i className="legend-granite" /> modeled Granite</span>
               <span><i className="legend-effect" /> simulated effect</span>
-            </div>
+            </section>
           </header>
 
           <div className="timeline-scale" aria-hidden="true">
@@ -910,7 +910,7 @@ export default function Home() {
                 Request cancel
               </button>
             </div>
-            <div className="adaptive-controls" aria-label="Adaptive fault controls">
+            <section className="adaptive-controls" aria-label="Adaptive fault controls">
               <button
                 type="button"
                 disabled={
@@ -949,7 +949,7 @@ export default function Home() {
               >
                 Resume verified state
               </button>
-            </div>
+            </section>
             <p>{runtimeMessage}</p>
             <small>
               Browser access requires an exact CORS origin allowlist. The token is never added
@@ -1047,15 +1047,15 @@ export default function Home() {
             </div>
             <span className="simulation-chip">NO EXTERNAL WRITE</span>
           </header>
-          <div className="effect-flow" aria-label="Effect intent state machine">
+          <ol className="effect-flow" aria-label="Effect intent state machine">
             {effectStages.map(([number, name, note], index) => (
-              <div className="effect-stage" key={name}>
+              <li className="effect-stage" key={name}>
                 <span>{number}</span>
                 <div><b>{name}</b><small>{note}</small></div>
                 {index < effectStages.length - 1 && <i aria-hidden="true">-&gt;</i>}
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
           <div className="effect-proof">
             <div><span>Injected condition</span><strong>{state.refused ? "none - run refused" : artifact.independent_effect_drill.injected_fault}</strong></div>
             <div><span>Simulated apply count</span><strong>{state.refused ? 0 : artifact.independent_effect_drill.physical_apply_count}</strong></div>

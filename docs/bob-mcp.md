@@ -41,7 +41,7 @@ and is not committed. A Granite path counts as live evidence only when its recei
 `measurement_kind="live-watsonx"` and contains provider-derived usage. Test-double receipts never
 count.
 
-## Twenty-two exposed tools
+## Twenty-three exposed tools
 
 | Tool | Purpose | Evidence boundary |
 |---|---|---|
@@ -65,6 +65,7 @@ count.
 | `finite_decision_explanation_drill` | Bind one public-fact explanation to every scheduler event | No hidden reasoning |
 | `finite_physical_admission_drill` | Check CPU/RAM/VRAM/storage/network/RTT/egress limits | Declared estimates, no energy |
 | `finite_adaptive_recovery_drill` | Exercise durable runtime revision, fault, and recovery | Local single coordinator |
+| `finite_production_survival_drill` | Repeat the preregistered crash/effect/approval/overhead gauntlet | Local deterministic fixtures, no provider calls |
 | `finite_framework_conformance_drill` | Run neutral and pinned LangGraph witnesses plus loss ledger | PageAgent remains not executed |
 | `finite_artifact_integrity_drill` | Verify artifact lineage, sealing, and mutation refusal | Local artifact store |
 

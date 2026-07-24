@@ -100,6 +100,15 @@ from .physical_resources import (
     PhysicalResourceAnalyzer,
     analyze_physical_resources,
 )
+from .production_survival import (
+    SurvivalContract,
+    SurvivalEvidence,
+    SurvivalReport,
+    SurvivalTrialRecord,
+    build_survival_contract,
+    run_production_survival,
+    verify_survival_evidence_directory,
+)
 from .profile_snapshot import (
     ProfileSnapshot,
     ProfileSnapshotRegistry,
@@ -173,6 +182,10 @@ __all__ = [
     "PhysicalAdmissionReport",
     "PhysicalAdmissionStatus",
     "PhysicalResourceAnalyzer",
+    "SurvivalContract",
+    "SurvivalEvidence",
+    "SurvivalReport",
+    "SurvivalTrialRecord",
     "ProfileSnapshot",
     "ProfileSnapshotRegistry",
     "SQLiteArtifactStore",
@@ -274,6 +287,7 @@ __all__ = [
     "WorkflowIRValidationError",
     "ConservationReport",
     "build_judge_evidence",
+    "build_survival_contract",
     "analyze_physical_resources",
     "compile_json",
     "compile_contracts",
@@ -285,6 +299,8 @@ __all__ = [
     "generate_stress_corpus",
     "replay_and_verify",
     "run_adaptive_recovery_drill",
+    "run_production_survival",
+    "verify_survival_evidence_directory",
     "run_pinned_langgraph_conformance_witness",
     "run_seeded_burst_corpus",
     "run_registered_experiments",
