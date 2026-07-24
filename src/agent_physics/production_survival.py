@@ -1184,7 +1184,7 @@ def runtime_identity() -> tuple[tuple[str, str], ...]:
             (
                 ("executable", Path(sys.executable).name),
                 ("machine", platform.machine() or "unknown"),
-                ("platform", platform.platform()),
+                ("platform", sys.platform),
                 ("python", platform.python_version()),
                 ("python_implementation", platform.python_implementation()),
             )

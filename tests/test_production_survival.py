@@ -206,7 +206,16 @@ def test_survival_runner_rejects_unbound_source_or_contract(tmp_path: Path) -> N
         )
 
 
-def test_runtime_identity_is_non_secret_and_canonical() -> None:
+def test_runtime_identity_is_non_secret_canonical_and_child_process_free(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_if_called() -> str:
+        raise AssertionError("runtime identity must not invoke platform.platform()")
+
+    monkeypatch.setattr(
+        "agent_physics.production_survival.platform.platform",
+        fail_if_called,
+    )
     identity = runtime_identity()
     assert identity == tuple(sorted(identity))
     assert {"executable", "machine", "platform", "python", "python_implementation"} == {
