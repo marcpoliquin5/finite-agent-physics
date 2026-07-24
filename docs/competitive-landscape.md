@@ -2,6 +2,9 @@
 
 **Snapshot:** July 22, 2026, 18:16-18:18 EDT (22:16-22:18 UTC).
 
+Temporal/E2B/Modal execution-layer documentation was checked separately on July 24, 2026; it is
+not included in the dated GitHub star census below.
+
 This is a point-in-time repository audit, not a leaderboard. Star and fork counters came from the
 public GitHub REST repository endpoint. Default-branch activity came from the GitHub commit
 endpoint. Release values came from GitHub's releases/latest endpoint. Feature summaries came from
@@ -26,6 +29,8 @@ That position complements rather than replaces the leading systems:
 - LangChain supplies components and integrations.
 - LangGraph, Microsoft Agent Framework, CrewAI, PydanticAI, and the OpenAI Agents SDK supply
   increasingly capable agent/workflow runtimes.
+- Temporal supplies the mature durable-execution comparison; E2B and Modal supply the isolated
+  agent-code runtime comparison.
 - Dify, Langflow, n8n, Agno, and DeerFlow supply product and deployment surfaces.
 - PageAgent and browser-use supply visible browser action surfaces.
 - LlamaIndex supplies a broad data, retrieval, and document-agent layer.
@@ -102,6 +107,7 @@ the behavior. It does not mean deployed, distributed, live-model, or externally 
 | Integer reservation, settlement, refund, stress replay | Executable local | [resource-ledger tests](../tests/test_resource_ledger_10k.py), [provider-quota tests](../tests/test_provider_quota.py) | Single-process declared quota model, not authenticated provider telemetry. |
 | Durable run ledger, bounded retries, restart/resume, usage accounting | Executable local | [executor tests](../tests/test_executor.py), [run-store tests](../tests/test_run_store.py) | SQLite and one active executor per run; no distributed lease. |
 | Active adaptive control | Executable but narrow | [adaptive-runtime tests](../tests/test_adaptive_runtime.py) | Single-flight local workers and caller-supplied capacity/reset facts; not general distributed executor mutation. |
+| Repeated production-survival proof | Executable local | [Production Survival tests](../tests/test_production_survival.py), [protocol](production-survival.md) | Six deterministic local scenarios; no live provider, sandbox, remote worker, or distributed consensus. |
 | Effect intent, exact-scope grant, fencing, idempotency, outbox, ambiguity | Executable local | [effect-kernel tests](../tests/test_effects.py) | Built-in commit adapter is simulation-only; no production target is called. |
 | Durable content-addressed artifacts and lineage | Executable local | [artifact-store tests](../tests/test_artifact_store.py) | Digest integrity is not a producer signature or external source attestation. |
 | Independent sealed whole-run verification | Executable local | [whole-run verifier tests](../tests/test_whole_run_verifier.py) | Verifies supplied sealed records; it does not establish truth of an external source. |
@@ -109,7 +115,7 @@ the behavior. It does not mean deployed, distributed, live-model, or externally 
 | Adapter capability negotiation | Executable local | [adapter-capability tests](../tests/test_adapter_capabilities.py) | Prevents known semantic mismatch; cannot prove an adapter's declaration is truthful. |
 | Framework-neutral wrapper plus LangGraph witness | Static wrapper plus one executable peer witness | [framework-conformance tests](../tests/test_framework_conformance.py), [LangGraph baseline tests](../tests/test_langgraph_baseline.py) | Actual pinned LangGraph 1.2.9 conformance only; no speed/reliability/cost superiority result. |
 | watsonx/Granite task worker | Executor-connected seam with injected tests | [watsonx worker tests](../tests/test_watsonx_worker.py) | Live mode exists, but no genuine live receipt is checked in at this snapshot. |
-| IBM Bob lifecycle/MCP | Twenty-two tested local tools and lifecycle seam | [MCP tests](../tests/test_mcp_tools.py), [Bob lifecycle tests](../tests/test_bob_lifecycle.py) | Tests cannot prove a genuine IBM Bob session occurred. |
+| IBM Bob lifecycle/MCP | Twenty-three tested local tools and lifecycle seam | [MCP tests](../tests/test_mcp_tools.py), [Bob lifecycle tests](../tests/test_bob_lifecycle.py) | Tests cannot prove a genuine IBM Bob session occurred. |
 | Page action governance | Static PageAgent-style contract only | [framework-conformance tests](../tests/test_framework_conformance.py) | Alibaba PageAgent and BeeAI are not imported or executed. No browser action is performed. |
 | Semantic/numeric/bilingual validation | Executable bounded checks | [semantic-safety tests](../tests/test_semantic_safety.py) | No general entailment, translation-quality, or live-model semantic correctness claim. |
 | Release evidence gating | Executable local manifest validator | [release-manifest tests](../tests/test_release_manifest.py) | Genuine Bob, live watsonx, GitHub, deployment, video, and submission evidence still require the entrant/external systems. |
@@ -149,7 +155,7 @@ were checked at the same immutable commit.
 | Finite-resource admission | Not a headline claim in audited PageAgent sources | Locally executable co-admission/refusal | A promising FINITE governance wedge, not proof PageAgent cannot add it. |
 | Durable restart/evidence | Not PageAgent's primary README proposition | SQLite resume plus sealed evidence verification | FINITE has local proof; PageAgent has direct browser usefulness. |
 | Integration status | Shipping PageAgent packages | PageAgent-style static contract only | **No Alibaba PageAgent integration can be claimed yet.** |
-| Adoption/distribution | 27,492 stars, npm/extension/releases | No Git remote, public release, or users at audit time | FINITE has a major trust/distribution gap. |
+| Adoption/distribution | 27,492 stars, npm/extension/releases | Public GitHub repository and CI, but no immutable release or demonstrated users | FINITE still has a major trust/distribution gap. |
 
 The high-value demo remains a governed PageAgent, but this is a design target rather than completed
 integration:
@@ -196,6 +202,29 @@ FINITE's pinned LangGraph comparator executes real StateGraph and SQLite checkpo
 same deterministic StormShift fixture. It verifies a semantic/conformance slice only. There is no
 tuned latency, cost, reliability, or quality result, and therefore no defensible “faster than
 LangGraph” claim.
+
+## Temporal, E2B, and Modal versus FINITE
+
+At the execution layer, these are more demanding comparators than LangChain. Temporal's official
+[platform documentation](https://docs.temporal.io/) centers crash-resumable durable workflows.
+[E2B](https://www.e2b.dev/docs) provides on-demand isolated Linux VM sandboxes for agent code.
+[Modal Sandboxes](https://modal.com/docs/guide/sandboxes) execute untrusted code in isolated
+containers, with [gVisor and network controls](https://modal.com/docs/guide/sandbox-networking).
+
+| Dimension | Temporal | E2B / Modal | FINITE at this snapshot |
+|---|---|---|---|
+| Primary job | Durable distributed workflow execution | Isolated execution substrate for untrusted/agent code | Constraint admission, local durable control, effect safety, and evidence |
+| Mature distributed service | Core proposition | Managed sandbox control plane | Absent |
+| Deterministic replay/recovery | Core proposition | Sandbox lifecycle/snapshots rather than workflow semantics | Executable local control-ledger replay and crash drills |
+| Hostile-code isolation | Activities still need an execution substrate | Core proposition | Absent; workers are trusted in-process fixtures |
+| Resource policy | Workflow/runtime configuration | CPU, memory, lifetime, filesystem, and network sandbox controls | Pre-dispatch logical/physical estimates plus local runtime caps |
+| Effect protocol | Activity idempotency/application design | Application design outside sandbox isolation | Explicit intent, grant, fence, outbox, ambiguity, and replay model |
+| Evidence today | Mature public platform | Shipping managed runtimes | Six-scenario local Production Survival proof; no HA/sandbox claim |
+
+The defensible strategy is not to recreate all three systems before the challenge deadline. FINITE
+must demonstrate its distinct quantitative admission/effect/evidence layer, then integrate or
+adopt a durable service and sandbox substrate instead of calling trusted in-process fixtures
+production isolation.
 
 ## Other requested peers versus FINITE
 

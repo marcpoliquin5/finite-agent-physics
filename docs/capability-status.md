@@ -1,6 +1,6 @@
 # FINITE v5.0.0-rc.1 local-candidate capability audit
 
-Audit date: 2026-07-22. This audit scores all 62 acceptance gates in [`PROGRAM.md`](../PROGRAM.md)
+Audit date: 2026-07-24. This audit scores all 62 acceptance gates in [`PROGRAM.md`](../PROGRAM.md)
 against executable repository code and tests. Roadmap prose, UI labels, and the v5 candidate name
 are not implementation evidence. **Pass (local)** means the exact gate has direct local or
 simulation evidence within the stated boundary; **Partial** means at least one material clause is
@@ -10,11 +10,11 @@ qualifier, not a passing status.
 The judge-facing candidate label is `v5.0.0-rc.1`; the corresponding Python distribution version
 is `5.0.0rc1`. Neither label means stable v5.0.0 has shipped.
 
-Verification snapshot: the current local full suite passed on the Windows worktree on 2026-07-22.
-Final test and coverage numbers must come from generated candidate/CI evidence at the immutable
-release commit; this audit does not freeze them. The worktree is mutable, so this result is not a
-release attestation, stable-v5 declaration, or evidence of any live provider, Bob, hosted,
-distributed, accessibility, or statistical claim.
+Verification snapshot: 1,018 tests passed with zero skipped/xfailed/disabled cases on the Windows
+worktree on 2026-07-24. The separate gates measured 93.820153% statements and 85.774135% branches.
+Final counts must still come from generated CI/candidate evidence at the immutable release commit.
+The worktree is mutable, so this result is not a release attestation, stable-v5 declaration, or
+evidence of any live provider, Bob, hosted, distributed, accessibility, or statistical claim.
 
 ## Executive summary
 
@@ -27,13 +27,16 @@ distributed, accessibility, or statistical claim.
 
 The strongest accepted local slice now includes strict workflow v2 compilation with typed ports,
 adapter-ABI admission, logical and physical admission, protected headroom, quota replay,
-10,000-transition conservation, adaptive crash/restart recovery, durable artifact lineage,
-bounded semantic checks, proposed-only effects, a 22-tool MCP surface, authenticated local
-REST/SSE, and independent sealed-evidence verification.
+10,000-transition conservation, adaptive crash/restart recovery, a preregistered six-scenario
+Production Survival runner, durable artifact lineage, bounded semantic checks, proposed-only
+effects, a 23-tool MCP surface, authenticated local REST/SSE, and independent sealed-evidence
+verification.
 
-These are still candidate-local proofs. There is no genuine Bob session, no captured live-watsonx
-receipt, no anonymous public API, no public GitHub release/tag verification, no public video or
-submission receipt, and no eligibility or SkillsBuild evidence. The current Sites console at
+These are still candidate-local proofs. The source repository is public at
+[marcpoliquin5/finite-agent-physics](https://github.com/marcpoliquin5/finite-agent-physics) with
+passing CI on its published main commit, but there is no reviewed release tag/assets, genuine Bob
+session, captured live-watsonx receipt, anonymous public API, public video or submission receipt,
+or eligibility/SkillsBuild evidence. The current Sites console at
 [finite-agent-physics.marcpoliquin5.chatgpt.site](https://finite-agent-physics.marcpoliquin5.chatgpt.site)
 is saved/deployed as Sites version 5 from Sites source commit `47ba39a`, but it is verified
 **owner-only**, not a judge-accessible deployment.
@@ -59,7 +62,7 @@ is saved/deployed as Sites version 5 from Sites source commit `47ba39a`, but it 
 | M15 | Partial | `replanning.py` records digest-bound residual decisions for slowdown, failure, provider capacity, and envelope events. `adaptive_runtime.py` first applies the full scheduler, adapter, reliability, deadline, and physical admission boundary, binds each task to its exact admitted profile, and never falls through to an unadmitted backend. The authenticated control plane applies revision-fenced provider 429/reset/capacity, budget-cut, pause, and resume events while preserving settled work; it atomically caps concurrent controls, retires terminal in-memory sessions, and reproduces persisted control digests with zero worker/provider calls. | The general replanner is not yet wired as the mutation controller for every active executor event, and first-class settlement-trigger coverage is incomplete. |
 | M16 | Partial | `RetryPolicy` and executor tests cover absolute deadlines, bounded calls, deterministic seeded jitter, bounded retry, circuit opening, redacted dead-letter events, cancellation, and restart-aware attempt counts. | Add one restart/recorded-replay proof that reproduces the complete timeout/retry/jitter/breaker/dead-letter decision trace. |
 | M17 | Partial | Bounded cooperative cancellation and uncooperative-worker detection are in `executor.py`; `test_cooperative_cancellation_is_visible_inside_worker` and cancellation-during-validation tests verify local cleanup. | Add expiring execution leases, settlement fencing, a process-isolated kill path, and tests proving an expired/stale worker cannot report usage, complete work, or authorize an effect. |
-| M18 | Partial | SQLite run state, adaptive-controller records, fixture execution, and the watsonx worker path resume without recalling completed work; R02 exercises unknown-inflight accounting and call-free replay after a crash. | Run/effect/artifact stores are not one atomic distributed recovery protocol, and the production cross-store crash window remains. |
+| M18 | Partial | SQLite run state, adaptive-controller records, fixture execution, and the watsonx worker path resume without recalling completed work; R02 exercises unknown-inflight accounting and call-free replay after a crash. `production_survival.py` repeats coordinator, effect-ambiguity, fencing, and delayed-approval recovery with raw digest-bound records. | Run/effect/artifact stores are not one atomic distributed recovery protocol, and the production cross-store crash window remains. |
 | M19 | Pass (local) | `artifact_store.py` provides restart-safe SQLite put/get, content-addressed deduplication, immutable attempt-linked provenance, parent foreign keys, atomic failure, and full-store verification; `tests/test_artifact_store.py` covers restart and tampering. | No remote blob, replication, backup, or distributed-store claim. |
 | M20 | Partial | Durable provenance binds run/task/attempt, producer-event digest, transformation digest, and input artifact IDs; whole-run evidence checks artifact and claim causality. | The active runtime does not yet require one unified full traversal from every final claim through every transformation to authenticated external sources. |
 | M21 | Pass (local) | `ContextPacker` enforces deterministic byte/token caps, loss accounting, inclusion/exclusion reasons, and visible refusal when mandatory context cannot fit. | Provider-tokenizer calibration remains outside the conservative estimator. |
@@ -71,14 +74,14 @@ is saved/deployed as Sites version 5 from Sites source commit `47ba39a`, but it 
 | M27 | Pass (local) | `adapter_capabilities.py`, workflow v2 requirements, and executor admission bind cancellation, checkpoint, streaming, usage, supported effects, fencing, and hidden retries. Missing or mismatched capabilities fail before a worker call. | Capability declarations still rely on locally trusted adapter metadata; remote attestation is not claimed. |
 | M28 | Partial | `benchmark.py::generated_scenario` and `run_simulated_benchmark` are seeded and repeatable; `test_generated_scenarios_and_records_are_reproducible` proves record equality. | Accept an explicit input-event stream, emit first-class decision and trace hashes, and assert byte-identical hashes across repeated seeds/events (including fault/retry decisions), not only equality of aggregate benchmark records. |
 | M29 | Partial / External-blocked | `watsonx_worker.py` executes the bounded Granite adapter inside the durable executor, requires provider usage, validates the public receipt, and resumes without recalling a completed model attempt in fake-inference tests. | Capture one genuine live-watsonx receipt tied to run, model, usage, latency, output artifact, validator, and release commit. BeeAI is not claimed. |
-| M30 | Partial / External-blocked | `mcp_server.py` exposes **22** tested local tools, including durable `finite_preflight`, `finite_run`, `finite_status`, `finite_explain_run`, and `finite_verify_run`; the real STDIO handshake test lists and calls the server. | A genuine IBM Bob session must invoke the lifecycle for one run and preserve timestamped prompt/call/run/trace evidence. Local MCP tests are not Bob evidence. |
+| M30 | Partial / External-blocked | `mcp_server.py` exposes **23** tested local tools, including durable `finite_preflight`, `finite_run`, `finite_status`, `finite_explain_run`, `finite_verify_run`, and `finite_production_survival_drill`; the real STDIO handshake test lists and calls the server. | A genuine IBM Bob session must invoke the lifecycle for one run and preserve timestamped prompt/call/run/trace evidence. Local MCP tests are not Bob evidence. |
 | M31 | Pass (local) | `control_api.py` and `control_service.py` expose health/readiness, bearer-protected lifecycle, start-paused adaptive runs, revision-fenced controls, call-free replay, and cursor-resumable SSE. Black-box tests cover strict parsing, auth, exact-origin CORS, restart, and no direct database access; a digest-bound default load proof independently re-verifies 64 real-loopback-TCP runs, both 32-way admission caps, 256 controls, per-run control limits, effect isolation, and zero external commits/calls during replay. | This is disclosed local fixture evidence, not hosted capacity; no TLS-termination, OIDC, tenant-RBAC, distributed rate-limit, or HA claim. |
 | M32 | Partial | The console renders sealed evidence plus a real local API flow: paused launch, budget cut, provider 429/reset, resume, SSE history, zero-call replay, and run-scoped proposed-effect inspection. Locked build tests and desktop/mobile browser runs verify reflow and report no console or request errors in that tested flow. | The Sites URL is owner-only; there is no judge-accessible public API path, full assistive-technology audit, or public deployment verification. |
 | M33 | Pass (local) | `decision_explanations.py` emits one digest-bound public numeric fact/rule-ID record per deterministic scheduler event, including completion and refusal, with reasoning access explicitly false. | Other control planes may need their own explanation schemas, but the scheduler gate passes. |
 | M34 | Pass (local) | `adaptive_runtime.py` replays persisted controller records without workers and reproduces every state/decision/control digest; quota and ledger replayers and the whole-run verifier fail closed on mutation. | This is recorded local control replay, not re-execution of live model semantics. |
-| M35 | Partial | `fair_benchmark.py` fixes one excluded warmup plus 30 preregistered measured seeds per executed system, requires actual local FINITE/plain-Python receipts, conditionally executes only the exact LangGraph pin, keeps PageAgent unexecuted and metric-free, and emits paired intervals without a winner. The separate 450-record simulator slice adds complete paired fault-transform evidence. | Run identical live tasks/prompts/models/tools/validators/cache rules across honest baselines, inject paired runtime faults, disclose hardware, and publish raw immutable-commit evidence before making a comparison claim. |
+| M35 | Partial | `fair_benchmark.py` fixes one excluded warmup plus 30 preregistered measured seeds per executed system, requires actual local FINITE/plain-Python receipts, conditionally executes only the exact LangGraph pin, keeps PageAgent unexecuted and metric-free, and emits paired intervals without a winner. The 450-record simulator slice adds paired fault transforms; Production Survival adds repeated local pass^k, p50/p95/p99 recovery, overhead, and duplicate-effect evidence. | Run identical live tasks/prompts/models/tools/validators/cache rules across honest baselines, inject paired live/runtime faults, disclose hardware, and publish raw immutable-commit evidence before making a comparison claim. τ-bench/BFCL remain not executed. |
 | M36 | Partial | StormShift runs a typed fictional DAG, revalidates restart outputs, stops at a proposed effect, and gates completion on bounded citation, freshness, authority-taint, bilingual controlled-fact, URL, and static accessibility checks. Its registered deterministic adversarial corpus is refused, and the local console flow has a desktop/mobile rendered-browser reflow/error audit. | No general entailment/translation-quality proof, screen-reader or full WCAG audit, live Granite synthesis, or real incident/publication claim. |
-| M37 | Partial / External-blocked | CLI/MCP/API entry points, deterministic candidate generation/offline verification, cross-platform CI gates, sealed console fallback, and Bob work-package templates exist. | A clean immutable commit/tag, fresh-clone timing, genuine Bob provenance, public release assets, and externally verified judge path are still missing. |
+| M37 | Partial / External-blocked | CLI/MCP/API entry points, deterministic candidate generation/offline verification, cross-platform CI gates, a public GitHub repository with passing CI, sealed console fallback, and Bob work-package templates exist. | A reviewed immutable release tag/assets, fresh-clone timing, genuine Bob provenance, and externally verified judge path are still missing. |
 
 ## Stretch program (S01-S25)
 
@@ -114,7 +117,7 @@ is saved/deployed as Sites version 5 from Sites source commit `47ba39a`, but it 
 
 | ID | Status | Current evidence | Blocking boundary |
 |---|---|---|---|
-| R01 | Partial / External-blocked | The 22-tool MCP surface, durable Bob lifecycle, and watsonx worker seam are locally tested. | No genuine Bob session and no same-run live-watsonx receipt exist. |
+| R01 | Partial / External-blocked | The 23-tool MCP surface, durable Bob lifecycle, production-survival drill, and watsonx worker seam are locally tested. | No genuine Bob session and no same-run live-watsonx receipt exist. |
 | R02 | Pass (local) | `run_adaptive_recovery_drill` settles two tasks, processes a 429/reset/capacity sequence and budget cut, crashes with unknown in-flight work, restarts without recall, protects mandatory work, and reproduces the control digest through call-free replay. | Provider events and workers are deterministic local fixtures, not authenticated telemetry or live Granite. |
 | R03 | Pass (local) | `whole_run_verifier.py` consumes only sealed evidence and independently checks identity, event order, conservation, artifacts/claims, context, approvals, effect uniqueness, and replay binding; mutation tests fail closed. | SHA-256 is mutation detection, not producer authentication or a signature. |
 | R04 | Pass (local) | Physical admission covers CPU-ms, RAM/VRAM, storage, ingress/egress, bandwidth, RTT, egress cost, transport-path bounds, integer overflow, and a 12-row coverage matrix with energy unsupported. | Values are declared estimates, not measured physical runtime or hardware telemetry. |
@@ -127,7 +130,7 @@ is saved/deployed as Sites version 5 from Sites source commit `47ba39a`, but it 
 
 1. **Genuine Bob evidence:** use IBM Bob for a substantive contribution, then have Bob call preflight, run, status, explain, and verify for one release run ID. Preserve timestamped prompts, tool calls, outputs, file/test mapping, and commit.
 2. **Live Granite evidence:** run that same lifecycle through watsonx.ai and retain a redacted `live-watsonx` receipt containing model ID, provider usage, measured latency, output/artifact digest, validator result, and run/commit binding.
-3. **Immutable GitHub release:** publish the reviewed clean commit, annotated tag, candidate artifacts/checksums, and passing CI; verify every link and hash from a signed-out session.
+3. **Immutable GitHub release:** publish the reviewed clean benchmark/Bob-ready commit, annotated tag, candidate artifacts/checksums, and passing CI; verify every link and hash from a signed-out session. The repository itself is already public.
 4. **Judge-accessible deployment:** change the current owner-only Sites access to anonymous or explicitly judge-shared access, deploy the intended API if it is claimed, and verify the complete path from the intended judge account.
 5. **Human eligibility evidence:** complete event registration, team/age/enrollment checks, SkillsBuild activity, rights/consents, and retain private originals plus permitted redacted digests.
 6. **Fair benchmark freeze:** finish preregistration, identical-fixture checks, raw paired records, failures-in-denominator, hardware/cache disclosure, and confidence intervals. Omit any win headline that misses its gate.

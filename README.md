@@ -40,7 +40,7 @@ declared estimates, not hardware telemetry. Energy remains explicitly unsupporte
 
 ```mermaid
 flowchart LR
-    Bob["IBM Bob"] --> MCP["22-tool MCP seam"]
+    Bob["IBM Bob"] --> MCP["23-tool MCP seam"]
     Clients["Frameworks and API clients"] --> Compiler["Typed workflow compiler"]
     MCP --> Compiler
     Compiler --> Admit{"Logical + physical admission"}
@@ -116,8 +116,9 @@ Everything below is implemented and locally test-backed inside its stated bounda
 33. A no-provider-call whole-run verifier that consumes sealed evidence.
 34. Mutation rejection across resource, artifact, context, approval, effect, and manifest identities.
 35. A real pinned LangGraph conformance witness plus an explicit conversion-loss ledger.
-36. A preregistered paired deterministic fault laboratory with raw records and intervals.
-37. Twenty-two Bob-callable MCP tools tested through a real STDIO handshake.
+36. Preregistered paired fault and production-survival laboratories with raw records, pass^k,
+    p50/p95/p99 recovery timing, local overhead, and duplicate-effect metrics.
+37. Twenty-three Bob-callable MCP tools tested through a real STDIO handshake.
 38. Typed submit, status, inspect, cancel, approve, and resumable event-stream HTTP routes.
 39. A live console that keeps bearer credentials in memory and distinguishes static evidence.
 40. Deterministic release-candidate checksums, SBOM, provenance, package inspection, and offline verification.
@@ -182,6 +183,8 @@ Useful local evidence commands:
 agent-physics demo --policy sequential
 agent-physics judge-bundle
 agent-physics fair-benchmark --output artifacts/fair-benchmark
+agent-physics production-survival --trials 10 --output artifacts/production-survival
+agent-physics production-survival --verify-only artifacts/production-survival
 python scripts/run_live_load.py --output artifacts/live-load
 python scripts/run_live_load.py --verify-only artifacts/live-load
 python scripts/export_console_artifact.py
@@ -201,10 +204,11 @@ python -c "from agent_physics.bob_lifecycle import default_bob_run_service; prin
 
 ## Bob is a requirement, not a logo
 
-FINITE exposes 22 local STDIO MCP tools for capability discovery; preflight, run, status,
+FINITE exposes 23 local STDIO MCP tools for capability discovery; preflight, run, status,
 explanation, and verification; deterministic simulation; quota, context, effect, replanning,
-physical-admission, framework-conformance, adaptive-recovery, and artifact-integrity drills; and
-bounded Granite readiness. See the [Bob MCP guide](docs/bob-mcp.md) and
+physical-admission, framework-conformance, adaptive-recovery, production-survival, and
+artifact-integrity drills; and bounded Granite readiness. See the [Bob MCP guide](docs/bob-mcp.md),
+[production-survival protocol](docs/production-survival.md), and
 [session runbook](docs/bob-session-runbook.md).
 
 The committed [Bob build log](docs/bob-build-log.md) must contain only real entrant-owned Bob
@@ -233,9 +237,12 @@ where FINITE is differentiated, and 45 gaps that must not be hidden behind star 
 ## Current evidence and release state
 
 Local evidence already includes the Python suite, core coverage above the v5 threshold, a real MCP
-protocol handshake, a live local HTTP/SSE end-to-end run, console build/lint/render tests, and a
-zero-vulnerability `npm audit` at verification time. The exact final counts and hashes belong in
-the generated release-candidate report rather than hand-maintained marketing prose.
+protocol handshake, a live local HTTP/SSE end-to-end run, console build/lint/render tests, a
+preregistered production-survival runner, and a zero-vulnerability `npm audit` at verification
+time. The public repository is
+[marcpoliquin5/finite-agent-physics](https://github.com/marcpoliquin5/finite-agent-physics);
+the exact final counts and hashes belong in generated evidence rather than hand-maintained
+marketing prose.
 
 The Physics Console is deployed at
 [finite-agent-physics.marcpoliquin5.chatgpt.site](https://finite-agent-physics.marcpoliquin5.chatgpt.site),
@@ -245,7 +252,7 @@ Stable `v5.0.0` is still blocked by:
 
 - genuine, timestamped IBM Bob build and MCP lifecycle evidence;
 - a real live-Granite/watsonx run and redacted provider receipt;
-- authenticated public GitHub publication and an immutable release tag;
+- an immutable reviewed release tag with candidate assets and signed-out hash verification;
 - anonymous or explicitly judge-shared deployment access and signed-out verification;
 - entrant eligibility, event registration, and IBM SkillsBuild evidence;
 - a captioned public video of no more than three minutes; and

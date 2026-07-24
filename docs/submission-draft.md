@@ -48,7 +48,7 @@ untrusted candidate and makes its promises executable through ten planes:
 7. bounded semantic, freshness, bilingual, accessibility, and safety gates;
 8. proposed effect intents with approval, fencing, idempotency, and ambiguity recovery;
 9. sealed evidence, whole-run no-call replay, mutation checks, SBOM, and provenance; and
-10. a 22-tool Bob MCP surface, authenticated REST/SSE, and live-capable Physics Console.
+10. a 23-tool Bob MCP surface, authenticated REST/SSE, and live-capable Physics Console.
 
 The core rule is simple: **refuse before spending when the required promises cannot fit**. When an
 admitted run loses capacity, FINITE can shed optional work and recompute the residual schedule, but

@@ -19,11 +19,13 @@ version; neither is a stable `v5.0.0` declaration.
 - Bounded semantic-safety checks and a deterministic adversarial corpus covering controlled
   citations, bilingual facts, freshness, URL policy, authority separation, and static
   accessibility declarations.
-- Twenty-two local IBM Bob-callable MCP tools, the durable preflight/run/status/explain/verify
+- Twenty-three local IBM Bob-callable MCP tools, the durable preflight/run/status/explain/verify
   lifecycle, and a bounded watsonx worker seam. No genuine Bob or live-watsonx receipt is implied.
 - Bearer-protected local REST submit/status/inspect/cancel/approve routes and resumable SSE.
 - Exact neutral framework round trips, explicit LangGraph semantic-loss accounting, a conditional
   pinned LangGraph witness, and a metric-free PageAgent `not-executed` benchmark row.
+- A preregistered six-scenario Production Survival runner with repeated pass^k, p50/p95/p99
+  recovery timing, paired local overhead, raw records, and duplicate-effect metrics.
 - Deterministic release-candidate generation and offline verification with wheel/sdist inspection,
   checksums, SBOM, unsigned provenance, and cross-platform CI gates.
 
@@ -31,10 +33,13 @@ version; neither is a stable `v5.0.0` declaration.
 
 - Fail-closed contract parsing, strict evidence schemas, approval-gated irreversible effects,
   fencing, idempotency, exact CORS/auth checks, taint separation, and adversarial replay tests.
+- Replaced the console's advisory-affected ESLint dependency tree with pinned Biome
+  React/TypeScript linting plus `tsc --noEmit`; the locked tree audits at zero known
+  vulnerabilities at verification time.
 
 ### Known release blockers
 
-- Genuine IBM Bob evidence, a same-run live Granite receipt, public GitHub commit/tag/CI evidence,
+- Genuine IBM Bob evidence, a same-run live Granite receipt, an immutable release tag/assets,
   anonymous or explicitly judge-shared hosting, eligibility/SkillsBuild evidence, a verified
   three-minute video, and the final submission receipt are not complete.
 - The current Sites URL is owner-only, and no public API deployment has been verified.

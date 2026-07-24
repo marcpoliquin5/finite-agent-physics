@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from .examples import miami_eoc_envelope, miami_eoc_graph
 from .feasibility import FeasibilityAnalyzer
@@ -111,6 +112,40 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=2_000,
         help="deterministic paired-bootstrap sample count (minimum 200)",
+    )
+    survival = subparsers.add_parser(
+        "production-survival",
+        help="run the preregistered local crash/recovery and overhead gauntlet",
+    )
+    survival.add_argument(
+        "--output",
+        type=Path,
+        default=Path("artifacts/production-survival"),
+        help="directory for contract, raw records, report, and file manifest",
+    )
+    survival.add_argument(
+        "--trials",
+        type=int,
+        default=10,
+        help="repeated trials per scenario (minimum 3)",
+    )
+    survival.add_argument(
+        "--seed-base",
+        type=int,
+        default=5_000,
+        help="non-negative first trial seed",
+    )
+    survival.add_argument(
+        "--revision",
+        help=(
+            "optional caller label (marked unverified); omit to read local Git HEAD and "
+            "report dirty state"
+        ),
+    )
+    survival.add_argument(
+        "--verify-only",
+        type=Path,
+        help="independently verify an existing evidence directory without running trials",
     )
     return parser
 
@@ -233,6 +268,92 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+    if args.command == "production-survival":
+        from .judge_bundle import resolve_source_revision
+        from .production_survival import (
+            build_survival_contract,
+            run_production_survival,
+            verify_survival_evidence_directory,
+        )
+
+        if args.verify_only is not None:
+            evidence, manifest = verify_survival_evidence_directory(
+                args.verify_only.resolve()
+            )
+            print(
+                json.dumps(
+                    {
+                        "verified": True,
+                        "all_trials_observed_passed": (
+                            evidence.report.all_trials_observed_passed
+                        ),
+                        "total_trials": evidence.report.total_trials,
+                        "total_passes": evidence.report.total_passes,
+                        "external_provider_calls": evidence.report.external_provider_calls,
+                        "duplicate_effect_applications": (
+                            evidence.report.duplicate_effect_applications
+                        ),
+                        "contract_digest": evidence.contract.contract_digest,
+                        "report_digest": evidence.report.report_digest,
+                        "manifest_digest": manifest["manifest_digest"],
+                        "source_revision": evidence.report.source_revision,
+                        "source_state": evidence.report.source_state,
+                        "output_directory": str(args.verify_only.resolve()),
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0 if evidence.report.all_trials_observed_passed else 1
+        root = Path(__file__).resolve().parents[2]
+        output = args.output.resolve()
+        source = resolve_source_revision(
+            args.revision,
+            project_root=root,
+            excluded_status_paths=(output,),
+        )
+        revision = str(source["revision"])
+        dirty = source["worktree_dirty"]
+        source_state = (
+            "caller-supplied-unverified"
+            if dirty is None
+            else ("dirty-after-output-exclusion" if dirty else "clean")
+        )
+        contract = build_survival_contract(
+            trials_per_scenario=args.trials,
+            seed_base=args.seed_base,
+        )
+        with TemporaryDirectory(prefix="finite-survival-") as working:
+            evidence = run_production_survival(
+                contract,
+                working_directory=working,
+                source_revision=revision,
+                source_state=source_state,
+            )
+        manifest = evidence.write(output)
+        print(
+            json.dumps(
+                {
+                    "verified": evidence.verify(),
+                    "all_trials_observed_passed": (
+                        evidence.report.all_trials_observed_passed
+                    ),
+                    "total_trials": evidence.report.total_trials,
+                    "total_passes": evidence.report.total_passes,
+                    "external_provider_calls": evidence.report.external_provider_calls,
+                    "duplicate_effect_applications": (
+                        evidence.report.duplicate_effect_applications
+                    ),
+                    "contract_digest": evidence.contract.contract_digest,
+                    "report_digest": evidence.report.report_digest,
+                    "manifest_digest": manifest["manifest_digest"],
+                    "source_revision": revision,
+                    "source_state": source_state,
+                    "output_directory": str(output),
+                },
+                sort_keys=True,
+            )
+        )
+        return 0 if evidence.report.all_trials_observed_passed else 1
     return 2
 
 

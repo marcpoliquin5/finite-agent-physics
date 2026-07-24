@@ -49,6 +49,7 @@ from .graph import ExecutionGraph
 from .ledger import verify_conservation
 from .physical_resources import PhysicalResourceAnalyzer
 from .provider_quota import GLOBAL_GUARD_SCOPE, MODEL_SCOPE, run_seeded_burst_corpus
+from .production_survival import build_survival_contract, run_production_survival
 from .replanning import EventDrivenReplanner, ProviderCapacityEvent, RunProgressSnapshot
 from .run_store import SQLiteRunStore, Usage
 from .scheduler import SchedulePolicy, Scheduler
@@ -72,7 +73,7 @@ def finite_capabilities() -> dict[str, Any]:
     return {
         "schema_version": "finite-mcp-capabilities/v1",
         "stage": "durable-local-and-live-ready",
-        "tool_count": 22,
+        "tool_count": 23,
         "tools": (
             "finite_capabilities",
             "finite_preflight",
@@ -94,6 +95,7 @@ def finite_capabilities() -> dict[str, Any]:
             "finite_decision_explanation_drill",
             "finite_physical_admission_drill",
             "finite_adaptive_recovery_drill",
+            "finite_production_survival_drill",
             "finite_framework_conformance_drill",
             "finite_artifact_integrity_drill",
         ),
@@ -117,6 +119,7 @@ def finite_capabilities() -> dict[str, Any]:
             "content-addressed post-hoc numeric explanations for replay-verified schedules",
             "strict signed-int64 physical-resource admission over declared nonzero CPU, RAM, VRAM, storage, network, bandwidth, RTT, and egress estimates",
             "durable adaptive crash/restart recovery with unknown-inflight reservation charging and call-free control-ledger replay",
+            "preregistered repeated local production-survival trials with pass^k, recovery, duplicate-effect, and orchestration-overhead metrics",
             "loss-accounted neutral framework wrappers plus a conditional executable witness for the pinned LangGraph comparator",
             "restart-safe SQLite artifact deduplication, lineage verification, and deliberate local tamper detection",
             "one durable Bob preflight-run-status-explain-verify lifecycle",
@@ -921,6 +924,41 @@ def finite_adaptive_recovery_drill() -> dict[str, Any]:
     }
 
 
+def finite_production_survival_drill(
+    trials_per_scenario: int = 3,
+    seed_base: int = 5_000,
+) -> dict[str, Any]:
+    """Run the preregistered local recovery gauntlet without external calls.
+
+    This compact Bob-facing drill returns the verified report. The CLI command
+    ``agent-physics production-survival`` additionally preserves raw records and
+    a digest-bound file manifest.
+    """
+
+    contract = build_survival_contract(
+        trials_per_scenario=trials_per_scenario,
+        seed_base=seed_base,
+    )
+    with TemporaryDirectory(prefix="finite-survival-mcp-") as directory:
+        evidence = run_production_survival(
+            contract,
+            working_directory=directory,
+            source_revision="mcp-session-unverified",
+            source_state="caller-supplied-unverified",
+        )
+    payload = evidence.report.as_dict()
+    payload.update(
+        {
+            "verified": evidence.verify(),
+            "record_count": len(evidence.records),
+            "contract": evidence.contract.as_dict(),
+            "raw_records_returned": False,
+            "artifact_command": "agent-physics production-survival",
+        }
+    )
+    return payload
+
+
 async def finite_framework_conformance_drill() -> dict[str, Any]:
     """Execute the reviewed pinned LangGraph witness when its extras are installed.
 
@@ -1137,6 +1175,7 @@ def build_server() -> Any:
     server.tool()(finite_decision_explanation_drill)
     server.tool()(finite_physical_admission_drill)
     server.tool()(finite_adaptive_recovery_drill)
+    server.tool()(finite_production_survival_drill)
     server.tool()(finite_framework_conformance_drill)
     server.tool()(finite_artifact_integrity_drill)
     return server

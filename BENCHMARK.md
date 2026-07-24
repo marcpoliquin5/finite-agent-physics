@@ -61,6 +61,30 @@ pinned comparator in `src/agent_physics/langgraph_baseline.py` and the wrapper/l
 `src/agent_physics/framework_conformance.py` establish bounded conformance, not production
 performance or cross-framework semantic equivalence.
 
+## Executable Production Survival benchmark
+
+`src/agent_physics/production_survival.py` preregisters six local scenarios covering compound
+429/capacity/budget/coordinator recovery, a hard effect crash, an ambiguous target
+acknowledgement, stale effect ownership, delayed human approval, and paired direct-call/FINITE
+local overhead. Run it with:
+
+```powershell
+agent-physics production-survival --trials 10 --output artifacts/production-survival
+agent-physics production-survival --verify-only artifacts/production-survival
+```
+
+Each scenario reports the observed pass rate, descriptive `pass^k`, observed all-`k`,
+p50/p95/p99 duration and recovery time where applicable, provider calls, physical simulated-effect
+applications, and duplicates. The overhead scenario additionally reports direct fixture time and
+FINITE-added local control-plane time. Raw digest-bound JSONL records, the preregistered contract,
+the report, and a SHA-256 file manifest are preserved.
+
+This benchmark uses deterministic in-process workers, a simulated effect target, and local SQLite.
+It makes zero provider, model, network, remote-worker, sandbox, or external-effect calls. The
+numbers are machine-local development evidence—not production, distributed, IBM, or universal
+performance measurements. See the complete
+[Production Survival protocol](docs/production-survival.md).
+
 ## Separate 450-record simulated-fault slice
 
 This is evidence from `experiments.py`, not the actual-invocation fair benchmark above. The
@@ -109,8 +133,9 @@ manifest is still required to authenticate provenance against coordinated relabe
 
 Each fault is labeled real, simulated, or replayed:
 
-The list below is the target protocol. Only the four transformations in the implemented
-deterministic slice above currently produce the complete paired evidence set.
+The list below is the target protocol. The 450-record simulator implements four preregistered
+pre-dispatch transformations. The separate Production Survival runner executes six local
+durability/overhead scenarios; neither is a live-provider fault suite.
 
 - provider 429 burst and reset;
 - slow-tail inference;

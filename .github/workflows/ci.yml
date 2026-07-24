@@ -131,6 +131,17 @@ jobs:
       - name: Independently re-verify the digest-bound load proof
         if: ${{ matrix.coverage }}
         run: python scripts/run_live_load.py --verify-only artifacts/live-load
+      - name: Run the preregistered Production Survival gauntlet
+        if: ${{ matrix.coverage }}
+        run: >-
+          agent-physics production-survival
+          --trials 10
+          --output artifacts/production-survival
+      - name: Independently re-verify Production Survival evidence
+        if: ${{ matrix.coverage }}
+        run: >-
+          agent-physics production-survival
+          --verify-only artifacts/production-survival
       - name: Upload Python test evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -140,6 +151,7 @@ jobs:
             artifacts/pytest-junit.xml
             artifacts/coverage.json
             artifacts/live-load/
+            artifacts/production-survival/
           if-no-files-found: error
           retention-days: 90
       - name: Installed CLI preflight
