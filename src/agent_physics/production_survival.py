@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import platform
+import os
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -1179,14 +1179,20 @@ def _report_from_dict(value: object) -> SurvivalReport:
 def runtime_identity() -> tuple[tuple[str, str], ...]:
     """Return the non-secret runtime identity used in public benchmark metadata."""
 
+    machine = (
+        os.uname().machine
+        if hasattr(os, "uname")
+        else os.environ.get("PROCESSOR_ARCHITECTURE", "unknown")
+    )
+    python_version = ".".join(str(part) for part in sys.version_info[:3])
     return tuple(
         sorted(
             (
                 ("executable", Path(sys.executable).name),
-                ("machine", platform.machine() or "unknown"),
+                ("machine", machine or "unknown"),
                 ("platform", sys.platform),
-                ("python", platform.python_version()),
-                ("python_implementation", platform.python_implementation()),
+                ("python", python_version),
+                ("python_implementation", sys.implementation.name),
             )
         )
     )

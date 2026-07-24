@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -209,15 +211,16 @@ def test_survival_runner_rejects_unbound_source_or_contract(tmp_path: Path) -> N
 def test_runtime_identity_is_non_secret_canonical_and_child_process_free(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fail_if_called() -> str:
-        raise AssertionError("runtime identity must not invoke platform.platform()")
+    def fail_if_called(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("runtime identity must not create a child process")
 
-    monkeypatch.setattr(
-        "agent_physics.production_survival.platform.platform",
-        fail_if_called,
-    )
+    monkeypatch.setattr(subprocess, "Popen", fail_if_called)
+    monkeypatch.setattr(subprocess, "check_output", fail_if_called)
+    monkeypatch.delattr(os, "uname", raising=False)
+    monkeypatch.setenv("PROCESSOR_ARCHITECTURE", "fixture-architecture")
     identity = runtime_identity()
     assert identity == tuple(sorted(identity))
+    assert dict(identity)["machine"] == "fixture-architecture"
     assert {"executable", "machine", "platform", "python", "python_implementation"} == {
         name for name, _value in identity
     }
