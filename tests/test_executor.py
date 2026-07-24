@@ -394,13 +394,13 @@ def test_bounded_retries_happen_between_nonoverlapping_calls(tmp_path: Path) -> 
 
 
 def test_absolute_task_deadline_cancels_call_without_retry(tmp_path: Path) -> None:
-    graph = ExecutionGraph.from_tasks((_task("slow", deadline_ms=30),))
+    graph = ExecutionGraph.from_tasks((_task("slow", deadline_ms=1_000),))
     calls = 0
 
     async def slow(_context: TaskExecutionContext) -> WorkerResult:
         nonlocal calls
         calls += 1
-        await asyncio.sleep(1)
+        await asyncio.sleep(2)
         return WorkerResult({"late": True})
 
     store = SQLiteRunStore(tmp_path / "runs.db")
@@ -503,13 +503,13 @@ def test_output_validator_is_a_nonretryable_completion_gate(tmp_path: Path) -> N
 
 
 def test_output_validation_cannot_commit_after_absolute_deadline(tmp_path: Path) -> None:
-    graph = ExecutionGraph.from_tasks((_task("validate-slow", deadline_ms=30),))
+    graph = ExecutionGraph.from_tasks((_task("validate-slow", deadline_ms=1_000),))
 
     async def worker(_context: TaskExecutionContext) -> WorkerResult:
         return WorkerResult({"candidate": True}, Usage(tokens=4))
 
     async def slow_validator(_task: TaskContract, _output: object) -> bool:
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(2)
         return True
 
     store = SQLiteRunStore(tmp_path / "runs.db")

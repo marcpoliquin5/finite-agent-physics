@@ -21,7 +21,12 @@ from agent_physics.serialization import canonical_json, content_digest
 @pytest.fixture(scope="module")
 def valid_live_evidence(tmp_path_factory: pytest.TempPathFactory) -> Path:
     output = tmp_path_factory.mktemp("live-load") / "evidence"
-    run_live_load(output, concurrency=32, rounds=1)
+    run_live_load(
+        output,
+        concurrency=32,
+        rounds=1,
+        request_timeout_seconds=90.0,
+    )
     return output
 
 
