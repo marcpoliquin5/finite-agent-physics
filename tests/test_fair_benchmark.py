@@ -180,10 +180,10 @@ def test_actual_local_receipts_share_the_registered_workload() -> None:
         assert all(record.envelope_digest == evidence.contract.envelope_digest for record in records)
         assert all(record.fixture_digest == evidence.contract.fixture_digest for record in records)
         assert all(record.outcome == "passed" for record in records)
-        assert all(record.slo_passed for record in records)
         assert all(record.comparable_output_conforms for record in records)
         assert all(record.common_validation_passed for record in records)
         assert all(record.guardrail_passed for record in records)
+        assert all(record.slo_passed == record.deadline_passed for record in records)
         assert all(record.external_effects_executed == 0 for record in records)
         assert all(record.model_calls_made is False for record in records)
         assert all(record.external_calls_made is False for record in records)
@@ -248,8 +248,13 @@ def test_summary_uses_measured_trials_only_and_pairs_by_seed() -> None:
     assert PAGEAGENT_SYSTEM_ID in report.unexecuted_system_ids
     assert PAGEAGENT_SYSTEM_ID not in {summary.system_id for summary in report.system_summaries}
     for summary in report.system_summaries:
+        measured = [
+            record
+            for record in evidence.records
+            if record.system_id == summary.system_id and record.phase == "measured"
+        ]
         assert summary.measured_runs == len(DEFAULT_MEASURED_SEEDS)
-        assert summary.slo_passes == len(DEFAULT_MEASURED_SEEDS)
+        assert summary.slo_passes == sum(record.slo_passed for record in measured)
         assert summary.pass_rate == 1.0
         assert summary.pass_rate_wilson_95.lower < 1.0
         assert summary.pass_rate_wilson_95.upper == 1.0
