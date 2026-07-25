@@ -108,10 +108,10 @@ regulated processes without forcing teams into a new authoring ecosystem.
 
 ## Links to replace at release
 
-- Public GitHub: `[PENDING AUTHENTICATED PUBLICATION]`
+- Public GitHub: [marcpoliquin5/finite-agent-physics](https://github.com/marcpoliquin5/finite-agent-physics)
 - Exact release tag: `[PENDING V5 GATES]`
 - Judge-accessible demo: `[CURRENT SITES BUILD IS OWNER-ONLY]`
 - Public video, <= 3 minutes: `[PENDING]`
-- Bob evidence reference: `[PENDING GENUINE SESSION]`
+- Bob evidence reference: [`docs/bob-live-validation-2026-07-24.md`](bob-live-validation-2026-07-24.md)
 - Granite receipt digest: `[PENDING LIVE RUN]`
 - Submission receipt: `[PENDING]`

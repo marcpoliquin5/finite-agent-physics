@@ -6,9 +6,10 @@ stable-v5 declaration. Use it with the exact reviewed commit and the detailed
 
 ## Evidence state at handoff
 
-The current local full suite passed on the Windows worktree on 2026-07-22. Final test and coverage
+The current local full suite passed on the Windows worktree on 2026-07-24. Final test and coverage
 numbers must come from generated candidate/CI evidence at the immutable release commit. The local
-result is useful development evidence, but it is not an immutable release attestation. The current
+result was 1,018/1,018 tests, 93.820941% statement coverage, and 85.774135% branch coverage, but it
+is not an immutable release attestation. The current
 capability disposition is in the
 [capability audit](capability-status.md).
 
@@ -19,7 +20,7 @@ capability disposition is in the
 | Adaptive recovery | Revision-fenced pause/resume, 429/reset, budget-cut, crash/restart, unknown-use, and call-free replay drill | Authenticated local controls and caller-supplied events; no live provider telemetry |
 | Durable evidence | Restart-safe artifact deduplication/provenance plus an independent whole-run mutation verifier | SQLite and SHA-256 are local durability/integrity boundaries, not identity signatures |
 | Semantic safety | Controlled citation, bilingual fact, freshness, URL, taint/authority, and static accessibility checks; the registered adversarial corpus is refused | Bounded grammar/declarations, not general entailment, translation quality, or rendered WCAG proof |
-| IBM integration seam | 22 local MCP tools and durable preflight/run/status/explain/verify lifecycle; watsonx worker has fake-inference integration tests | No genuine Bob session and no captured live-watsonx receipt yet |
+| IBM integration seam | Genuine Bob Shell `1.0.6` sessions invoked all 23 MCP tools, including a preserved durable lifecycle and 60/60 survival run; watsonx worker has fake-inference integration tests | Bob proof is local/hash-bound; no captured live-watsonx receipt yet |
 | Product surface | Bearer-protected local REST/SSE/adaptive controls and a sealed/live-aware console; desktop/mobile browser flow verifies zero-call replay and run-scoped proposed effects | No public API, full assistive-technology audit, or judge path; current Sites access is owner-only |
 | Framework evidence | Exact neutral round trip, explicit LangGraph loss ledger, and conditional pinned LangGraph execution | No BeeAI or PageAgent execution; no universal equivalence or superiority claim |
 
@@ -33,8 +34,9 @@ signed-out or judge-account test passes.
 
 Before recording, answer these in order:
 
-1. Is there a genuine, timestamped Bob contribution tied to the release commit? If no, omit the
-   Bob-builder footage and do not say Bob built or ran this candidate.
+1. Is the genuine, timestamped Bob testing contribution and its local hashed session evidence
+   available for the reviewed commit? If no, omit the Bob footage. Do not say Bob authored code;
+   the recorded contribution is execution and testing.
 2. Did Bob call `finite_preflight`, `finite_run`, `finite_status`, `finite_explain_run`, and
    `finite_verify_run` for one preserved run ID? If no, describe only the Bob-compatible local MCP
    surface.
@@ -93,10 +95,10 @@ evidence supports the exact claim.
 
 ### 2:45-3:00 — IBM proof or honest fallback
 
-If genuine Bob plus same-run live-watsonx evidence exists, show the redacted lifecycle receipt and
-commit binding. Otherwise use these seconds for the verifier and say: "The local IBM integration
-seams are tested; genuine Bob and live Granite evidence are still external gates." End on the
-candidate label, not stable v5.
+Show the genuine Bob Shell session history, lifecycle telemetry, and commit binding. Because no
+same-run live-watsonx receipt exists yet, say: "IBM Bob executed the complete local MCP validation
+surface; live Granite remains a fail-closed credential gate." End on the candidate label, not
+stable v5.
 
 ## Reproduction commands
 
@@ -116,10 +118,12 @@ commands, logs, screenshots, or evidence artifacts.
 
 ## External evidence still missing
 
-- Genuine Bob planning/build/testing contribution and same-run MCP lifecycle capture.
-- Genuine live-watsonx/Granite receipt tied to the Bob run and release commit.
-- Public GitHub repository verification, clean immutable commit, annotated tag, and passing CI at
-  that commit.
+- Genuine live-watsonx/Granite receipt tied to a Bob run and the reviewed release commit.
+- Public/redacted export or recorded judge presentation of the locally retained Bob session
+  originals; their hashes and safe summary are in
+  [`bob-live-validation-2026-07-24.md`](bob-live-validation-2026-07-24.md).
+- Reviewed immutable release tag/assets and signed-out verification; the public repository and
+  passing `main` CI already exist.
 - Anonymous or explicitly judge-shared site access and signed-out/judge-account verification; a
   public API only if the submission claims one.
 - Entrant age/enrollment, team registration, IBM SkillsBuild completion, rights, and consent
