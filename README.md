@@ -202,6 +202,13 @@ python -m pip install -e ".[watsonx]"
 python -c "from agent_physics.bob_lifecycle import default_bob_run_service; print(default_bob_run_service().granite_preflight())"
 ```
 
+For a secret-safe interactive setup that launches Bob in the same process, see the
+[watsonx operator handoff](docs/watsonx-operator-handoff.md) or run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start_watsonx_bob.ps1
+```
+
 ## Bob is a requirement, not a logo
 
 FINITE exposes 23 local STDIO MCP tools for capability discovery; preflight, run, status,
