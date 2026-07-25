@@ -64,7 +64,9 @@ def _graph() -> ExecutionGraph:
 
 
 def _envelope() -> RunEnvelope:
-    return RunEnvelope(1_000, 100, 100, 1_000, 1)
+    # Capability tests exercise admission and manifest binding, not wall-clock
+    # deadline enforcement. Leave scheduler headroom on contended CI runners.
+    return RunEnvelope(10_000, 100, 100, 1_000, 1)
 
 
 class CapableWorker:
