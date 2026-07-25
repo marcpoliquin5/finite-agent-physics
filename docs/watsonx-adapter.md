@@ -7,6 +7,11 @@ options, and response shape in the
 IBM's [programmatic inference guide](https://dataplatform.cloud.ibm.com/docs/content/wsj/analyze-data/fm-prompt-notebook.html?context=wx)
 describes the required service URL, API key, project or space, and model ID.
 
+For the secure, interactive PowerShell-to-Bob path, use the
+[watsonx operator handoff](watsonx-operator-handoff.md). It prompts for the API key without echoing
+or persisting it, runs a call-free preflight, requires explicit live-call authorization, and
+launches Bob with the bounded MCP runbook in the same process.
+
 ## Configuration
 
 ```powershell
