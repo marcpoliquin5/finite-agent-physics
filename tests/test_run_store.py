@@ -12,6 +12,7 @@ from agent_physics.run_store import (
     EventConflict,
     RunDefinitionConflict,
     SCHEMA_VERSION,
+    SQLITE_BUSY_TIMEOUT_MS,
     SQLiteRunStore,
     Usage,
     UsageRecord,
@@ -25,6 +26,20 @@ def _create_run(store: SQLiteRunStore, run_id: str = "run-1"):
         envelope={"deadline_ms": 5_000, "max_parallelism": 2},
         deadline_at_ms=10_000,
     )
+
+
+def test_connections_allow_bounded_contention_within_live_request_deadline(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteRunStore(tmp_path / "busy-timeout.db")
+    connection = store._connect()  # noqa: SLF001
+    try:
+        configured = connection.execute("PRAGMA busy_timeout").fetchone()[0]
+    finally:
+        connection.close()
+
+    assert SQLITE_BUSY_TIMEOUT_MS == 30_000
+    assert configured == SQLITE_BUSY_TIMEOUT_MS
 
 
 def test_schema_migration_and_database_enforced_append_only_tables(tmp_path: Path) -> None:

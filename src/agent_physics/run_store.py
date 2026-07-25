@@ -19,6 +19,7 @@ from typing import Final, cast
 
 
 SCHEMA_VERSION: Final[int] = 2
+SQLITE_BUSY_TIMEOUT_MS: Final[int] = 30_000
 
 
 class RunStoreError(RuntimeError):
@@ -290,10 +291,14 @@ class SQLiteRunStore:
         return self._clock_ms()
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.database_path, timeout=10.0, isolation_level=None)
+        connection = sqlite3.connect(
+            self.database_path,
+            timeout=SQLITE_BUSY_TIMEOUT_MS / 1_000,
+            isolation_level=None,
+        )
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA busy_timeout = 10000")
+        connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
         return connection
 
     def _initialize(self) -> None:

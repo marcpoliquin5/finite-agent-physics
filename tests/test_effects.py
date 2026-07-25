@@ -16,6 +16,7 @@ from agent_physics.effects import (
     InvalidApproval,
     InvalidTransition,
     SQLiteEffectBroker,
+    SQLITE_BUSY_TIMEOUT_MS,
     SimulatedEffectAdapter,
     SimulatedProcessCrash,
     StaleFence,
@@ -37,6 +38,20 @@ def _broker(
         trusted_approval_keys={"safety-office": APPROVAL_SECRET},
         clock_ms=(lambda: clock[0]) if clock is not None else None,
     )
+
+
+def test_connections_allow_bounded_contention_within_live_request_deadline(
+    tmp_path: Path,
+) -> None:
+    broker = _broker(tmp_path / "busy-timeout.db", "broker-a")
+    connection = broker._connect()  # noqa: SLF001
+    try:
+        configured = connection.execute("PRAGMA busy_timeout").fetchone()[0]
+    finally:
+        connection.close()
+
+    assert SQLITE_BUSY_TIMEOUT_MS == 30_000
+    assert configured == SQLITE_BUSY_TIMEOUT_MS
 
 
 def _propose(

@@ -212,9 +212,11 @@ artifact-integrity drills; and bounded Granite readiness. See the [Bob MCP guide
 [session runbook](docs/bob-session-runbook.md).
 
 The committed [Bob build log](docs/bob-build-log.md) must contain only real entrant-owned Bob
-sessions. It is intentionally not backfilled from Codex work. Stable v5 remains blocked until a
-genuine Bob session materially contributes to planning, coding, or testing and invokes the FINITE
-lifecycle against the same release commit.
+sessions. It is intentionally not backfilled from Codex work. On 2026-07-24, genuine IBM Bob Shell
+sessions invoked all 23 MCP tools against executable commit `2be8f80`, including the durable
+lifecycle and 60/60 production-survival proof. The redacted provenance summary and hashes are in
+[the Bob validation record](docs/bob-live-validation-2026-07-24.md). Stable v5 remains blocked on
+the remaining release contract, including a genuine same-run live-watsonx receipt.
 
 ## Granite / watsonx.ai boundary
 

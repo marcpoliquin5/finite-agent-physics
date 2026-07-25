@@ -41,6 +41,7 @@ LIMITATIONS: Final[tuple[str, ...]] = (
     "Production targets must durably enforce idempotency and fencing themselves.",
     "The included adapter is simulation-only and never performs an external write.",
 )
+SQLITE_BUSY_TIMEOUT_MS: Final[int] = 30_000
 
 
 class EffectKernelError(RuntimeError):
@@ -450,10 +451,14 @@ class SQLiteEffectBroker:
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.database_path, timeout=10.0, isolation_level=None)
+        connection = sqlite3.connect(
+            self.database_path,
+            timeout=SQLITE_BUSY_TIMEOUT_MS / 1_000,
+            isolation_level=None,
+        )
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA busy_timeout = 10000")
+        connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
         return connection
 
     def _initialize(self) -> None:

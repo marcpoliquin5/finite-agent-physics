@@ -57,21 +57,21 @@ Strong evidence in the current worktree includes:
 - a bearer-protected local REST/SSE interface; and
 - a 23-tool Bob-compatible MCP surface plus a watsonx worker tested with fake inference.
 
-The candidate contains no genuine Bob session entry in `docs/bob-build-log.md`, no redacted
-live-Granite receipt, no public GitHub/tag/CI evidence, no public API, no live faulted
-cross-framework benchmark, and no eligibility, SkillsBuild, public video, project-page, or
-submission receipt. The documented Sites deployment is verified owner-only, not an anonymous judge
-path. Its mutable deployment version is intentionally not a release identity; the immutable
-repository commit and evidence digests are. Those absences are release blockers, not paperwork to
-infer later.
+The candidate now contains genuine Bob Shell test sessions and a hash-bound entry in
+`docs/bob-build-log.md`; the public GitHub `main` branch also has passing CI. It still has no
+redacted live-Granite receipt, reviewed release tag/assets, public API, live faulted cross-framework
+benchmark, or eligibility, SkillsBuild, public video, project-page, or submission receipt. The
+documented Sites deployment is verified owner-only, not an anonymous judge path. Its mutable
+deployment version is intentionally not a release identity; the immutable repository commit and
+evidence digests are. Those remaining absences are release blockers, not paperwork to infer later.
 
 ### Capability count in the current audit
 
 | Program | Pass | Partial | Absent | Total |
 |---|---:|---:|---:|---:|
-| Must-win M01-M37 | 19 | 17 | 1 | 37 |
+| Must-win M01-M37 | 20 | 16 | 1 | 37 |
 | Stretch S01-S25 | 0 | 11 | 14 | 25 |
-| **All capabilities** | **19** | **28** | **15** | **62** |
+| **All capabilities** | **20** | **27** | **15** | **62** |
 | Integrated proofs R01-R08 | 3 | 5 | 0 | 8 |
 
 These counts are deliberately conservative. A partial gate is not rounded up because its remaining
@@ -110,14 +110,14 @@ work appears straightforward.
 | M27 | Pass | Compiler-visible adapter requirements and executor admission enforce cancellation, checkpoint, streaming, usage, supported effects, fencing, and hidden-retry bounds before dispatch. | Remote adapter attestation is not claimed. |
 | M28 | Partial | Seeded benchmarks, quota traces, replans, and scheduler explanations replay deterministically in their subsystems. | One input-event-driven simulator with unified decision and trace hashes is absent. |
 | M29 | Partial / External-blocked | The watsonx worker runs inside durable executor state, requires provider usage, validates a public receipt, and resumes without recall in fake-inference tests. | Capture one genuine live-watsonx receipt bound to the release run and commit. |
-| M30 | Partial / External-blocked | Twenty-three local MCP tools and a real STDIO handshake are tested; durable preflight/run/status/explain/verify and Production Survival drills exist. | Capture those calls in one genuine IBM Bob session with preserved run/trace/commit evidence. |
+| M30 | Pass | Genuine IBM Bob Shell `1.0.6` sessions connected to the project STDIO server and invoked all 23 MCP tools. One session preserved preflight/run/status/explain/verify for `bob-shell-fixture-20260724-01`; another passed 60/60 survival trials. Session hashes and negative controls are recorded in `docs/bob-live-validation-2026-07-24.md`. | The Bob proof is local and hash-bound, not a signed IBM attestation; live watsonx remains M29/R01. |
 | M31 | Pass | Health/readiness plus bearer-protected local lifecycle, start-paused controls, zero-call replay, approval, caps, and resumable SSE operate over durable state. A digest-bound default load proof independently re-verifies 64 real-loopback runs, effect isolation, and zero external commits/calls during replay. | This is local fixture evidence, not a hosted-capacity claim; public hosting, TLS termination, OIDC, tenant RBAC, distributed rate limits, and HA are not claimed. |
 | M32 | Partial | The sealed/live-aware console renders DAG/Gantt/critical path, logical/physical pressure, protected budgets, effects, and replay evidence. A local desktop/mobile browser flow exercises paused launch, controls, resume, SSE, replay, and run-scoped effect inspection without console/request errors. | The Sites URL is owner-only and the complete judge-accessible hosted path and assistive-technology audit are unverified. |
 | M33 | Pass | `decision_explanations.py` and its tests bind one public-fact/rule-ID record to every deterministic scheduler event, including completion and refusal, with reasoning access explicitly false. | Other planes need comparable explanations, but the scheduler gate passes. |
 | M34 | Pass | Adaptive controller records replay without workers and reproduce state/decision/control digests; whole-run replay binding and subsystem replayers fail closed on mutation. | No live-model semantic re-execution claim. |
 | M35 | Partial | The executable fair benchmark fixes one excluded warmup plus 30 preregistered measured seeds per executed system, requires actual local FINITE/plain receipts, conditionally executes only the exact LangGraph pin, keeps PageAgent unexecuted and metric-free, and emits paired intervals without a winner; the separate simulator slice adds paired fault transforms. | Identical live tasks/models/tools/validators/cache rules, paired runtime faults, hardware disclosure, and immutable raw live evidence are absent. |
 | M36 | Partial | StormShift adds bounded citation, bilingual controlled-fact, freshness, URL, authority-taint, safety, and static-accessibility gating plus a registered adversarial corpus and a local desktop/mobile rendered-browser reflow/error audit. | Live Granite, general entailment/translation quality, screen-reader testing, and full WCAG conformance remain unproved. |
-| M37 | Partial / External-blocked | CLI/MCP/API entry points, deterministic candidate generation/offline verification, cross-platform CI gates, and Bob templates exist. | Fresh-clone timing, genuine Bob provenance, immutable public release, and judge-path verification are absent. |
+| M37 | Partial / External-blocked | CLI/MCP/API entry points, deterministic candidate generation/offline verification, cross-platform CI gates, public GitHub with passing CI, and genuine Bob testing provenance exist. | Fresh-clone timing, live-Granite evidence, reviewed immutable release assets, and judge-path verification are absent. |
 
 ## S01-S25 audit
 
@@ -153,7 +153,7 @@ work appears straightforward.
 
 | ID | Status | Evidence present | Exact missing proof |
 |---|---|---|---|
-| R01 | Partial / External-blocked | The 23-tool MCP surface, durable lifecycle, Production Survival drill, and watsonx worker seam exist. | One genuine Bob session and same-run live-Granite receipt must bind every R01 field. |
+| R01 | Partial / External-blocked | Genuine IBM Bob Shell sessions invoked all 23 MCP tools, the durable lifecycle, and a 60/60 Production Survival drill; the watsonx worker seam exists. | A same-run live-Granite receipt must bind the remaining provider/model/usage/latency/output/validator fields. |
 | R02 | Pass | One deterministic drill settles two tasks, applies 429/reset/capacity and budget-cut events, crashes with unknown in-flight use, restarts without recall, protects mandatory work, and reproduces the control digest call-free. | Local fixture/control inputs only; no live-provider claim. |
 | R03 | Pass | The independent whole-run verifier consumes sealed evidence only and checks identity, ordering, conservation, artifacts/claims, context, approvals, effects, and replay; mutation classes fail closed. | Digests are not signatures or producer authentication. |
 | R04 | Pass | Typed CPU, RAM/VRAM, storage, network bytes, bandwidth, RTT, egress, overflow, and transport-path bounds participate in admission; the coverage matrix labels energy unsupported. | Values are declared estimates, not runtime measurements. |
@@ -346,7 +346,8 @@ private Bob/provider content must never be committed.
   ambiguity, outbox, and compensation rules.
 - Its bounded semantic verifier catches the registered controlled-fact, freshness, URL,
   authority-taint, bilingual, and static-accessibility mutations.
-- Its local REST/SSE and 23-tool MCP surfaces are tested; this is not public deployment or Bob use.
+- Its local REST/SSE surface is tested, and genuine Bob Shell exercised all 23 MCP tools; this is
+  still not public deployment or live-watsonx use.
 - Its neutral/LangGraph wrapper evidence records preserved semantics and explicit losses; PageAgent
   remains not executed and metric-free.
 
