@@ -8,8 +8,10 @@ stable-v5 declaration. Use it with the exact reviewed commit and the detailed
 
 The current local full suite passed on the Windows worktree on 2026-07-24. Final test and coverage
 numbers must come from generated candidate/CI evidence at the immutable release commit. The local
-result was 1,018/1,018 tests, 93.820941% statement coverage, and 85.774135% branch coverage, but it
-is not an immutable release attestation. The current
+result was 1,020/1,020 tests, 93.821729% statement coverage, and 85.774135% branch coverage. The
+published `main` commit `ab51ff9` subsequently passed all ten GitHub jobs; see the
+[publication closeout](publication-closeout-2026-07-24.md). This is release-candidate evidence,
+not a stable-v5 attestation. The current
 capability disposition is in the
 [capability audit](capability-status.md).
 

@@ -10,8 +10,8 @@ qualifier, not a passing status.
 The judge-facing candidate label is `v5.0.0-rc.1`; the corresponding Python distribution version
 is `5.0.0rc1`. Neither label means stable v5.0.0 has shipped.
 
-Verification snapshot: 1,018 tests passed with zero skipped/xfailed/disabled cases on the Windows
-worktree on 2026-07-24. The separate gates measured 93.820941% statements and 85.774135% branches.
+Verification snapshot: 1,020 tests passed with zero skipped/xfailed/disabled cases on the Windows
+worktree on 2026-07-24. The separate gates measured 93.821729% statements and 85.774135% branches.
 Final counts must still come from generated CI/candidate evidence at the immutable release commit.
 The worktree is mutable, so this result is not a release attestation, stable-v5 declaration, or
 evidence of any live provider, hosted, distributed, accessibility, or statistical claim. Genuine
@@ -35,9 +35,11 @@ verification.
 
 These are still candidate-local proofs. The source repository is public at
 [marcpoliquin5/finite-agent-physics](https://github.com/marcpoliquin5/finite-agent-physics) with
-passing CI on its published main commit, and genuine Bob Shell sessions exercised all 23 MCP tools
-against executable commit `2be8f80`. There is no reviewed release tag/assets, captured
-live-watsonx receipt, anonymous public API, public video or submission receipt,
+passing CI on published `main` commit `ab51ff9`, and genuine Bob Shell sessions exercised all 23
+MCP tools against executable commit `2be8f80`. The
+[publication closeout](publication-closeout-2026-07-24.md) binds the final GitHub workflow and
+artifacts without relabeling the earlier Bob execution. There is no reviewed release tag/assets,
+captured live-watsonx receipt, anonymous public API, public video or submission receipt,
 or eligibility/SkillsBuild evidence. The current Sites console at
 [finite-agent-physics.marcpoliquin5.chatgpt.site](https://finite-agent-physics.marcpoliquin5.chatgpt.site)
 is saved/deployed as Sites version 5 from Sites source commit `47ba39a`, but it is verified

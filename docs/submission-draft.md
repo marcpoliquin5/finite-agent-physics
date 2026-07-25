@@ -56,12 +56,18 @@ it cannot erase completed work, elapsed time, settled use, or an existing effect
 
 ## How IBM Bob was used
 
-> **Submission blocker: replace this section only from genuine evidence.**
+Genuine IBM Bob Shell `1.0.6` sessions connected to FINITE's STDIO MCP server and invoked every one
+of its 23 tools. Bob exercised capability discovery; feasible and impossible preflight; fixture
+run, status, explanation, and verification for run `bob-shell-fixture-20260724-01`; crash/replay,
+quota, context, physical-admission, replanning, framework, artifact-integrity, and effect drills;
+a 450-record paired fault experiment; and 60/60 Production Survival trials. Human review rejected
+an initial invented tool inventory because its telemetry contained no MCP call, then required
+exact per-tool allowlisting and accepted only sessions whose telemetry recorded genuine calls.
 
-Summarize the entrant-owned Bob work packages, material code/test contributions, human review,
-and Bob-to-FINITE calls recorded in `docs/bob-build-log.md`. The final version must name one run ID
-for preflight, run, status, explain, and verify at the release commit. A configured MCP file, Codex
-work, or a protocol unit test is not evidence that Bob was used.
+Bob's contribution was independent execution and testing, not authorship of the repository code.
+The entrant-owned session IDs, non-secret hashes, corrections, and remaining live-Granite boundary
+are recorded in [`bob-build-log.md`](bob-build-log.md) and
+[`bob-live-validation-2026-07-24.md`](bob-live-validation-2026-07-24.md).
 
 ## IBM Granite path
 

@@ -243,8 +243,9 @@ protocol handshake, a live local HTTP/SSE end-to-end run, console build/lint/ren
 preregistered production-survival runner, and a zero-vulnerability `npm audit` at verification
 time. The public repository is
 [marcpoliquin5/finite-agent-physics](https://github.com/marcpoliquin5/finite-agent-physics);
-the exact final counts and hashes belong in generated evidence rather than hand-maintained
-marketing prose.
+the exact publication SHA, final 1,020-test gate, GitHub workflow, retained artifacts, and
+remaining boundaries are recorded in the
+[2026-07-24 publication closeout](docs/publication-closeout-2026-07-24.md).
 
 The Physics Console is deployed at
 [finite-agent-physics.marcpoliquin5.chatgpt.site](https://finite-agent-physics.marcpoliquin5.chatgpt.site),

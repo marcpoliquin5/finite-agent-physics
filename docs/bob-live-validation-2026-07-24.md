@@ -86,3 +86,11 @@ When those values are injected through the operator's secret mechanism, rerun
 provider-usage, latency, model, output/artifact digest, validator, Bob-session, and commit
 bindings. Until that happens, the only accurate claim is: **genuine IBM Bob Shell invoked and
 tested the complete local MCP surface; live watsonx/Granite execution is not yet evidenced.**
+
+## Publication closeout
+
+The historical Bob sessions above remain bound to executable commit `2be8f80`; they were not
+relabelled as executions against later commits. Subsequent durability and test-fixture fixes,
+the 1,020-test isolated gate, the final public commit, all-green GitHub workflow, and retained
+GitHub artifacts are recorded separately in
+[`publication-closeout-2026-07-24.md`](publication-closeout-2026-07-24.md).
