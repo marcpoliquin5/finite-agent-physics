@@ -375,41 +375,45 @@ def test_process_local_active_run_cap_rejects_then_recovers_capacity(
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
+        async def wait_for_completed(run_id: str) -> None:
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + 10.0
+            while loop.time() < deadline:
+                if app.status(run_id)["state"] == "completed":
+                    return
+                await asyncio.sleep(0.01)
+            raise AssertionError(f"{run_id} did not complete within 10 seconds")
+
         release = asyncio.Event()
 
         async def worker(_context: object) -> WorkerResult:
             await release.wait()
             return WorkerResult({"settled": True})
 
+        workflow = _workflow()
+        envelope = workflow["envelope"]
+        assert isinstance(envelope, dict)
+        envelope["deadline_ms"] = 10_000
+
         store = SQLiteRunStore(tmp_path / "active-cap.db")
         app = ControlPlane(
             AsyncGraphExecutor(store, workers={"work": worker}),  # type: ignore[dict-item]
             max_active_runs=1,
         )
-        accepted = await app.submit(_workflow(), run_id="active-one")
+        accepted = await app.submit(workflow, run_id="active-one")
         assert accepted["run"]["state"] == "running"  # type: ignore[index]
 
         with pytest.raises(ControlAPIError) as saturated:
-            await app.submit(_workflow(), run_id="active-two")
+            await app.submit(workflow, run_id="active-two")
         assert saturated.value.status == 429
         assert saturated.value.code == "active_run_limit"
 
         release.set()
-        for _ in range(200):
-            if app.status("active-one")["state"] == "completed":
-                break
-            await asyncio.sleep(0.005)
-        else:
-            raise AssertionError("first run did not release process-local capacity")
+        await wait_for_completed("active-one")
 
-        second = await app.submit(_workflow(), run_id="active-two")
+        second = await app.submit(workflow, run_id="active-two")
         assert second["run"]["run_id"] == "active-two"  # type: ignore[index]
-        for _ in range(200):
-            if app.status("active-two")["state"] == "completed":
-                break
-            await asyncio.sleep(0.005)
-        else:
-            raise AssertionError("second run did not complete")
+        await wait_for_completed("active-two")
 
     asyncio.run(scenario())
 
