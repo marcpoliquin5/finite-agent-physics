@@ -57,6 +57,7 @@ def test_adapter_labels_injected_receipt_and_disables_hidden_retry() -> None:
     assert receipt.usage_complete
     assert receipt.input_tokens == 12
     assert receipt.output_tokens == 4
+    assert construction[0]["validate"] is False
     assert construction[0]["max_retries"] == 0
     assert "secret-not-for-logs" not in str(receipt.as_dict())
     assert len(fake.calls) == 1
