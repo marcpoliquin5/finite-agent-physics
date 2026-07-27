@@ -209,6 +209,18 @@ For a secret-safe interactive setup that launches Bob in the same process, see t
 powershell -ExecutionPolicy Bypass -File .\scripts\start_watsonx_bob.ps1
 ```
 
+If IBM Cloud access is unavailable, run the credential-free IBM contract certification instead:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test_ibm_offline.ps1
+```
+
+That gate requires Bob to report the project STDIO MCP server as connected, invokes all 23 tools
+through the official MCP client, and executes IBM's real `ibm-watsonx-ai` request builder and
+response parser with external networking blocked. GitHub CI repeats the SDK contract against
+versions 1.5.3 and 1.6.0. See the [IBM offline certification](docs/ibm-offline-certification.md)
+for exact proof and limitations.
+
 ## Bob is a requirement, not a logo
 
 FINITE exposes 23 local STDIO MCP tools for capability discovery; preflight, run, status,
@@ -227,10 +239,11 @@ the remaining release contract, including a genuine same-run live-watsonx receip
 
 ## Granite / watsonx.ai boundary
 
-The optional adapter calls IBM `ModelInference` with SDK retries disabled so FINITE owns attempt
-accounting. It records a redacted receipt with model ID, measured latency, provider-reported usage
-when present, and request/output digests. Tests use an injected fake inference client and do not
-count as IBM evidence. See the [watsonx adapter guide](docs/watsonx-adapter.md).
+The optional adapter calls IBM `ModelInference` with catalog validation and SDK retries disabled so
+FINITE owns every network attempt. It records a redacted receipt with model ID, measured latency,
+provider-reported usage when present, and request/output digests. Credential-free tests include a
+real IBM SDK wire-contract path, but remain explicitly non-live evidence. See the
+[watsonx adapter guide](docs/watsonx-adapter.md).
 
 ## Comparison with PageAgent and LangChain
 

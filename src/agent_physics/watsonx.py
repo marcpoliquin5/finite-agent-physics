@@ -128,6 +128,10 @@ class WatsonxGraniteAdapter:
             credentials={"url": self.config.url, "apikey": self.config.api_key},
             project_id=self.config.project_id,
             params=parameters,
+            # IBM's SDK defaults to validating the model against the remote catalog during
+            # construction. That creates unadmitted network calls before generation. FINITE
+            # resolves availability through the single admitted generation request instead.
+            validate=False,
             max_retries=0,
         )
         started_ns = monotonic_ns()

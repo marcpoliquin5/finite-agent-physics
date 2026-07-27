@@ -12,6 +12,11 @@ For the secure, interactive PowerShell-to-Bob path, use the
 or persisting it, runs a call-free preflight, requires explicit live-call authorization, and
 launches Bob with the bounded MCP runbook in the same process.
 
+When IBM Cloud credentials or project access are unavailable, use the
+[IBM offline contract certification](ibm-offline-certification.md). It runs IBM Bob's MCP
+connection check and the distributed IBM SDK request/response path with external sockets blocked.
+It is stronger than an adapter-only mock but remains non-live evidence.
+
 ## Configuration
 
 ```powershell
@@ -38,9 +43,11 @@ explicit Granite backend, followed by `finite_status`, `finite_explain_run`, and
 
 ## Runtime ownership
 
-`WatsonxGraniteAdapter` owns exactly one bounded generation request. It passes `max_retries=0` to
-the SDK so FINITE, rather than a hidden client loop, owns attempt count, worst-case reservation,
-deadline, retry, and settlement.
+`WatsonxGraniteAdapter` owns exactly one bounded generation request. It passes `validate=False`
+because IBM's default validation performs remote model-catalog requests during construction. It
+also passes `max_retries=0`. FINITE, rather than SDK catalog or retry traffic, therefore owns
+attempt count, worst-case reservation, deadline, retry, and settlement. Model availability is
+resolved by the admitted generation request itself.
 
 `WatsonxTaskWorker` binds that request to the admitted task and profile:
 
@@ -78,8 +85,10 @@ preserved.
 ## Evidence boundary
 
 Unit tests inject a fake inference factory and label every resulting receipt
-`injected-test-double`. They prove adapter shape, redaction, bounding, settlement, validation, and
-resume semantics. They are not IBM inference evidence.
+`injected-test-double`. The separate credential-free contract uses that injection seam to
+construct IBM's real `ModelInference`, then intercepts only the final HTTP POST. Together they
+prove adapter shape, the IBM-documented wire payload, response parsing, redaction, bounding,
+settlement, validation, and resume semantics. They are not live IBM inference evidence.
 
 A result may be described as live Granite evidence only when:
 
