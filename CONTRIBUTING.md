@@ -17,7 +17,7 @@ python -m agent_physics.cli preflight
 
 ## Change requirements
 
-- Reference a `PROGRAM.md` capability or explain the new acceptance gate.
+- Reference a `docs/PROGRAM.md` capability or explain the new acceptance gate.
 - Add tests for the normal path and at least one failure path.
 - Do not introduce benchmark claims without raw reproducible evidence.
 - Keep deterministic authorization and accounting outside LLM decisions.

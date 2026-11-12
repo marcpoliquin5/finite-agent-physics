@@ -1,6 +1,6 @@
 # FINITE delivery program: 62 capabilities plus 8 integrated release proofs
 
-`ROADMAP.md` explains the product surface. This file is the engineering contract. A capability
+The archived [challenge roadmap](archive/ibm-bob-challenge-2026-07/ROADMAP.md) lists the planned product surface. This file is the engineering contract. A capability
 is not “done” because a UI element exists; it is done only when its acceptance gate passes.
 
 ## Must-win vertical slice (M01–M37)

@@ -17,7 +17,7 @@ SLO pass = mandatory validators pass
 
 ## Current executable fair comparison
 
-[`src/agent_physics/fair_benchmark.py`](src/agent_physics/fair_benchmark.py) preregisters four
+[`src/agent_physics/fair_benchmark.py`](../src/agent_physics/fair_benchmark.py) preregisters four
 rows in a fixed order:
 
 1. **FINITE durable runtime:** actual local invocation required.
@@ -83,7 +83,7 @@ This benchmark uses deterministic in-process workers, a simulated effect target,
 It makes zero provider, model, network, remote-worker, sandbox, or external-effect calls. The
 numbers are machine-local development evidence—not production, distributed, IBM, or universal
 performance measurements. See the complete
-[Production Survival protocol](docs/production-survival.md).
+[Production Survival protocol](production-survival.md).
 
 ## Separate 450-record simulated-fault slice
 

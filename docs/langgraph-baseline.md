@@ -53,7 +53,7 @@ deadline enforcement, dynamic replanning, retry policy, live model call, externa
 framework-level effect authorization. Its SQLite checkpoint demonstrates state persistence for
 one nominal run; it is not a crash/restart or exactly-once result. The current tests establish
 graph and output conformance only. Any future latency, cost, quality, or fault-tolerance claim
-must follow the preregistered paired protocol in `BENCHMARK.md` and include framework scheduling
+must follow the preregistered paired protocol in [`BENCHMARK.md`](BENCHMARK.md) and include framework scheduling
 and checkpoint overhead.
 
 CI runs this as an isolated optional-dependency job and uploads the normalized JSON record as

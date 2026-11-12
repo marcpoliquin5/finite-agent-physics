@@ -45,7 +45,7 @@ finite_capabilities
 Supporting drills expose simulation, resource conservation, quota windows, hostile context,
 effects, StormShift validation, executor restart, residual replanning, decision explanations,
 physical admission, adaptive recovery, framework conformance, and artifact integrity. The complete
-inventory and evidence labels are in [`bob-mcp.md`](bob-mcp.md).
+inventory and evidence labels are in [`bob-mcp.md`](../../bob-mcp.md).
 
 Bob can therefore ask two operationally useful questions before or during work:
 
