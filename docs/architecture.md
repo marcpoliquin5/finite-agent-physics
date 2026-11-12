@@ -223,4 +223,4 @@ Local implementation is only one part of the release. The stable tag additionall
 Bob provenance, a live Granite receipt, a public immutable GitHub release, anonymous or explicitly
 judge-shared deployment verification, eligibility and SkillsBuild evidence, an accessible public
 video, and submission receipts. The complete conjunctive gates are in
-[`V5_RELEASE_CONTRACT.md`](V5_RELEASE_CONTRACT.md).
+[`V5_RELEASE_CONTRACT.md`](archive/ibm-bob-challenge-2026-07/V5_RELEASE_CONTRACT.md).

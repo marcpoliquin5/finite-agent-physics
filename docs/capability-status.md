@@ -1,6 +1,6 @@
 # FINITE v5.0.0-rc.1 local-candidate capability audit
 
-Audit date: 2026-07-24. This audit scores all 62 acceptance gates in [`PROGRAM.md`](../PROGRAM.md)
+Audit date: 2026-07-24. This audit scores all 62 acceptance gates in [`PROGRAM.md`](PROGRAM.md)
 against executable repository code and tests. Roadmap prose, UI labels, and the v5 candidate name
 are not implementation evidence. **Pass (local)** means the exact gate has direct local or
 simulation evidence within the stated boundary; **Partial** means at least one material clause is
@@ -37,7 +37,7 @@ These are still candidate-local proofs. The source repository is public at
 [marcpoliquin5/finite-agent-physics](https://github.com/marcpoliquin5/finite-agent-physics) with
 passing CI on published `main` commit `ab51ff9`, and genuine Bob Shell sessions exercised all 23
 MCP tools against executable commit `2be8f80`. The
-[publication closeout](publication-closeout-2026-07-24.md) binds the final GitHub workflow and
+[publication closeout](archive/ibm-bob-challenge-2026-07/publication-closeout-2026-07-24.md) binds the final GitHub workflow and
 artifacts without relabeling the earlier Bob execution. There is no reviewed release tag/assets,
 captured live-watsonx receipt, anonymous public API, public video or submission receipt,
 or eligibility/SkillsBuild evidence. The current Sites console at
@@ -143,5 +143,5 @@ is saved/deployed as Sites version 5 from Sites source commit `47ba39a`, but it 
 9. **Submission and receipts:** publish early, verify the project page and every URL signed out, then retain the final submission receipt, timestamps, artifact digests, and rollback/offline fallback.
 
 For the operator-ready sequence and claim-safe fallback, use
-[`docs/judge-handoff.md`](judge-handoff.md). The full shot list remains in
-[`docs/demo-script.md`](demo-script.md).
+[`docs/judge-handoff.md`](archive/ibm-bob-challenge-2026-07/judge-handoff.md). The full shot list remains in
+[`docs/demo-script.md`](archive/ibm-bob-challenge-2026-07/demo-script.md).

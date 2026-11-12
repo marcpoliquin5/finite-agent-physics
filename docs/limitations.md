@@ -4,15 +4,17 @@ FINITE is a v5 **release candidate**, not a production control plane and not a s
 This file is normative for demos and project-page claims. A passing local test narrows uncertainty;
 it does not turn fixture, simulated, estimated, private, or human-unverified evidence into live fact.
 
-## IBM and challenge evidence
+## IBM integration evidence
 
-- The repository does not yet contain a genuine entrant-owned IBM Bob build-log entry.
-- MCP configuration and protocol tests prove compatibility, not substantive Bob use.
-- No environment available during the current build contained watsonx credentials or a Bob session
-  reference, so no live Granite receipt was produced.
+- IBM Bob use is limited to the Bob Shell validation sessions of 2026-07-24, which exercised all
+  23 MCP tools ([record](archive/ibm-bob-challenge-2026-07/bob-live-validation-2026-07-24.md)).
+  MCP configuration and protocol tests otherwise prove compatibility, not substantive Bob use.
+- No live Granite receipt has been produced. No environment used during development contained
+  watsonx credentials.
 - Injected inference tests are labeled `injected-test-double`; they are never IBM provider evidence.
-- Eligibility, registration, team membership, rule acceptance, SkillsBuild completion, video
-  publication, project-page publication, and submission receipts require entrant action.
+- FINITE was prepared for the July 2026 AI Builders Challenge with IBM Bob but was not submitted.
+  The planning and submission documents are kept in the
+  [archive](archive/ibm-bob-challenge-2026-07/README.md).
 
 ## Workflow and scheduling limits
 
@@ -116,7 +118,7 @@ it does not turn fixture, simulated, estimated, private, or human-unverified evi
 - Release-candidate SBOM and SLSA-style provenance are deterministic local metadata. They are not a
   Sigstore signature, transparency-log entry, or trusted remote builder attestation.
 - Candidate artifacts set `release_ready=false`. Stable `v5.0.0` is prohibited until every
-  conjunctive gate in `V5_RELEASE_CONTRACT.md` passes at one clean public commit.
+  conjunctive gate in [`V5_RELEASE_CONTRACT.md`](archive/ibm-bob-challenge-2026-07/V5_RELEASE_CONTRACT.md) passes at one clean public commit.
 
 ## Framework-comparison limits
 

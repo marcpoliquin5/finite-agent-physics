@@ -1,6 +1,6 @@
 ## Promise or invariant changed
 
-Describe the user-visible promise, failure mode, or `PROGRAM.md` acceptance gate this changes.
+Describe the user-visible promise, failure mode, or `docs/PROGRAM.md` acceptance gate this changes.
 
 ## Evidence
 

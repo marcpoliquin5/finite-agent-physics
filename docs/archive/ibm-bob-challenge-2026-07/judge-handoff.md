@@ -13,7 +13,7 @@ published `main` commit `ab51ff9` subsequently passed all ten GitHub jobs; see t
 [publication closeout](publication-closeout-2026-07-24.md). This is release-candidate evidence,
 not a stable-v5 attestation. The current
 capability disposition is in the
-[capability audit](capability-status.md).
+[capability audit](../../capability-status.md).
 
 | Judge-visible claim | Evidence available now | Boundary to say aloud |
 |---|---|---|

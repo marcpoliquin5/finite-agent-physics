@@ -27,7 +27,7 @@ body:
   - type: input
     id: program
     attributes:
-      label: PROGRAM.md capability or release proof
+      label: docs/PROGRAM.md capability or release proof
       placeholder: M13, S18, R06, or new proposal
     validations:
       required: true

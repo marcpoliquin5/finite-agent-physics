@@ -5,7 +5,7 @@ description: Review Agent Physics workflow, scheduler, or adapter changes for en
 
 <Steps>
 <Step>
-Read `docs/architecture.md`, `docs/ibm-bob-fit.md`, and the changed code before reviewing.
+Read `docs/architecture.md`, `docs/archive/ibm-bob-challenge-2026-07/ibm-bob-fit.md`, and the changed code before reviewing.
 </Step>
 <Step>
 Identify every constraint the change reads, transforms, reserves, enforces, or reports.
@@ -22,6 +22,6 @@ Add focused regression tests for confirmed gaps. Run the full test and lint suit
 </Step>
 <Step>
 Summarize findings by invariant, severity, evidence, and accepted correction. Record the real
-session in `docs/bob-build-log.md` after human review.
+session in `docs/archive/ibm-bob-challenge-2026-07/bob-build-log.md` after human review.
 </Step>
 </Steps>

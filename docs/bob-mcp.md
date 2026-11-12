@@ -91,7 +91,7 @@ into the prompt or build log.
 
 ## Evidence capture
 
-Only real Bob sessions belong in `docs/bob-build-log.md`. Capture:
+Only real Bob sessions belong in `docs/archive/ibm-bob-challenge-2026-07/bob-build-log.md`. Capture:
 
 - date, time zone, Bob version, and workspace commit;
 - the entrant prompt and a concise description of Bob's material contribution;

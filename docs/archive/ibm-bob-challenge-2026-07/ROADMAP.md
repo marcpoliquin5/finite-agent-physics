@@ -4,12 +4,12 @@ This is a coherent systems program, not a promise that every item will be produc
 by July 31. `P0` items form the judged vertical slice; `P1` items deepen the evidence and
 experience; `P2` items demonstrate a credible post-hackathon trajectory.
 
-The acceptance source of truth is [`PROGRAM.md`](PROGRAM.md): 62 capabilities plus eight
+The acceptance source of truth is [`PROGRAM.md`](../../PROGRAM.md): 62 capabilities plus eight
 integrated proofs. The active candidate label is `v5.0.0-rc.1` / Python `5.0.0rc1`; stable v5.0.0
 remains blocked. The numbered themes below are a product roadmap, not an alternate completion
 count.
 
-The dated [competitive landscape and 45-gap register](docs/competitive-landscape.md) determines
+The dated [competitive landscape and 45-gap register](../../competitive-landscape.md) determines
 release order: eligibility and judge proof come before additional framework breadth.
 
 Current local evidence includes 22 MCP tools, typed ports and adapter ABI admission, declared
